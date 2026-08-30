@@ -18,9 +18,13 @@ zero flash writes:
 - both radios on air (2.4 GHz rt2800soc + 5 GHz MT7612E), switch OK
 - kernel 6.18.44 — the same version the unit's proven X-Wrt build runs
 
-CI builds all six image types green in ~50 min. Remaining step:
-permanent install via sysupgrade — procedure in
-[RECOVERY.md](RECOVERY.md).
+CI builds all six image types green in ~50 min. **Installed to flash
+2026-08-31** via plain sysupgrade from X-Wrt (web UI, settings not
+kept): the upgrade wrote the correct kernel slot, the NAND driver and
+UBI came up clean on the real flash boot (944 PEBs, 0 bad,
+0 corrupted), and the system boots repeatably to a login prompt with
+LuCI at 192.168.1.1. The stock bootloader was never modified.
+Procedures and recovery ladder: [RECOVERY.md](RECOVERY.md).
 
 ## Hardware
 

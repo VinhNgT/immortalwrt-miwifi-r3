@@ -159,7 +159,20 @@ Subsequent updates: ImmortalWrt's own sysupgrade with the newer
   from `downloads.x-wrt.com/rom/`.
 - From a broken system: recovery ladder step 2 or 3 above.
 
-## Appendix: pb-boot — researched 2026-08-31, optional install
+## Appendix: pb-boot — researched, declined (2026-08-31)
+
+**Decision: not installing.** The convenience (recovery over LAN cable
+instead of the serial adapter) does not justify the one irreversible
+mtd0 write on a bootloader that can never be byte-verified against an
+official copy. The stock Ralink U-Boot stays, permanently. Serial +
+RAM-boot initramfs + the backup cover every failure mode.
+
+`patches/0003` (CI_KERNPART_EXT) stays in the port regardless: it is a
+guarded no-op under stock U-Boot, and it keeps the images correct for
+any other R3 owner who does run pb-boot or breed.
+
+Everything below is kept as the research record, in case the decision
+is ever revisited.
 
 `D:\xiaomi mir3\pbboot r3\pb-boot-xiaomi3-20181021-fd6329c.img` —
 138,852 B, md5 `87c79881406cafa47853c734c76e1141`, sha256
@@ -188,15 +201,51 @@ environmental, not evidence against the image. Ralink NAND driver
 
 **Behavior (settled):**
 - It contains none of Xiaomi's boot-flag strings — it always boots
-  slot 0, `kernel_stock` @ 0x200000. It does NOT boot mtd8.
+  slot 0, `kernel_stock` @ 0x200000. It does NOT boot mtd8. (Binary
+  constant scan agrees: `0x200000` appears 24×; `0x600000` and
+  `0xa00000` never — pb-boot's entire model is "firmware starts at
+  0x200000".)
 - Recovery: hold reset while powering on, release after 2–3 s → slow
   yellow LED → upload page at **`http://192.168.1.1`** (LAN cable
   only). Earlier notes saying 192.168.15.1 were wrong.
 - Recovery upload format = two kernels + UBI — exactly our
-  `breed-factory.bin` (confirmed against the tutorial's own
-  `…-pb-boot.bin`: uImage @ 0, uImage @ 0x400000, UBI @ 0x800000).
+  `breed-factory.bin`. Byte-verified on our build: it is literally
+  `kernel1.bin` twice (padded to 4 MiB each) + `rootfs0.bin`, so a
+  recovery write at 0x200000 lands the pieces at 0x200000 / 0x600000 /
+  0xa00000 — our DTS partitions exactly.
 - Flash the `.img` verbatim, uImage header included (stock mtd0 is
   wrapped identically: load/entry `0x80200000`, name "NAND Fla").
+
+**Recovery mechanics (from the binary + x-wrt issue tracker):**
+- The recovery environment is a mini-OS ("uOS v2.0") with HTTPD v3.0
+  and TFTP v1.1 modules. The web upload **validates the firmware
+  type before writing** (`[httpd]Error firmware type.`) — garbage is
+  rejected, then it erases and writes with a progress page and
+  reboots via `/reboot.cgi`.
+- **TFTP alternative** (no browser needed): in TFTP recovery mode the
+  router accepts a push — send `breed-factory.bin` as `firmware.bin`
+  to `192.168.1.1` with any TFTP client.
+- The recovery server exposes breed-style `/fullflash.bin` and
+  `/eeprom.bin` paths — i.e. it can likely serve a **full NAND dump /
+  factory-partition dump over HTTP**. Confirm on first live test; if
+  real, this replaces the USB-stick backup procedure.
+- Ecosystem proof: x-wrt sysupgrade's pb-boot handling
+  (`CI_KERNPART_EXT`, commit `5c410e0095` "sysupgrade compatable with
+  breed") exists precisely for this flow; x-wrt issue #394 documents
+  the stale-slot failure when firmware lacks it (user's LEDE
+  sysupgrade "didn't stick" under pb-boot) — the exact bug our
+  `patches/0003` prevents. Issue #409 shows an R3 user flipping
+  between PandoraBox and X-Wrt routinely.
+- One residual unknown: whether recovery erases the whole
+  0x200000→end region or only the upload's extent (stale UBI blocks
+  beyond a smaller image could theoretically upset UBI attach). Years
+  of community cross-firmware flashing suggest it's a non-issue, and
+  it is not a brick vector — kernel slots still boot, serial still
+  works, and `mtd erase ubi` + re-upload fixes it. If paranoid,
+  `mtd erase ubi` from Linux before recovery-flashing.
+- Per ptpt52 (issue #404): going back to **stock Xiaomi firmware** is
+  not supported from this ecosystem. X-Wrt / ImmortalWrt / PandoraBox
+  interchange freely; stock does not.
 
 **If installing — the safe sequence** (each step gated on the last):
 
@@ -209,10 +258,14 @@ environmental, not evidence against the image. Ralink NAND driver
 3. Serial attached, stable power: U-Boot menu option `9`, send the
    pb-boot `.img`. **Do not power off during the write.**
 4. Reboot → pb-boot boots mtd7 → same UBI rootfs as before.
-5. Test recovery: hold-reset power-on → `192.168.1.1` — look, upload
-   nothing. Serial-free recovery achieved.
-6. Thereafter: recovery = upload `breed-factory.bin`; sysupgrades keep
-   both slots current (platform.sh detects pb-boot → 0003 writes both).
+5. Test recovery: hold-reset power-on → `192.168.1.1` — inspect the
+   page, try `GET /fullflash.bin` (a working full-NAND download makes
+   this the new backup path), then reboot without uploading.
+   Serial-free recovery achieved.
+6. Thereafter: recovery = upload `breed-factory.bin` via the web page
+   (or TFTP-push it as `firmware.bin` to `192.168.1.1`); sysupgrades
+   keep both slots current (platform.sh detects pb-boot → 0003 writes
+   both).
 
 **Residual risk, stated honestly:** the mtd0 write is the one
 irreversible act on this router; a corrupted write (power loss) or a
