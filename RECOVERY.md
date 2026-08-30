@@ -63,7 +63,27 @@ mtd0 analysis showed both the stock bootloader and pb-boot are
 uImage-wrapped the same way ⇒ **flash the `.img` verbatim, do not strip
 the 64-byte header**.
 
-## Path A (recommended): USB-TTL serial + U-Boot does the write
+## Serial session outcome (2026-08-30) — pb-boot SHELVED
+
+Executed on the real unit: CP2102 on COM5, console proven both ways,
+menu captured, TFTP from the laptop working (after firewall off).
+The pb-boot dry run — `tftpboot 80100000 pbboot.img` + autostart
+`bootm` — transferred and checksum-verified, jumped… and died silently:
+no console output, no keypress response, no web server on
+`192.168.1.1`/`192.168.15.1`, no DHCP. Warm-chaining a bootloader from
+a running U-Boot is inherently unreliable (it expects cold-reset CPU
+state), so this neither proves nor clears the image — and a bootloader
+write on ambiguous evidence is the one unrecoverable mistake available
+in this project.
+
+**Decision: do not write mtd0. Recovery doctrine is serial console +
+stock U-Boot + the verified backup.** With serial, stock U-Boot can
+RAM-boot a full Linux anytime (menu option 1 / `tftpboot`+`bootm`) to
+repair any partition from the backup — pb-boot adds nothing except
+serial-free convenience. Revisit only if the exact binary can be
+byte-verified against an official PandoraBox release.
+
+## Path A (reference — write step shelved): USB-TTL serial + U-Boot does the write
 
 Needs: any $3 CP2102/CH340/FT232 USB-TTL adapter (3.3 V), and a TFTP
 server (tftpd64 on the second laptop, static IP `192.168.1.3`, netmask
@@ -74,25 +94,40 @@ server (tftpd64 on the second laptop, static IP `192.168.1.3`, netmask
 2. Power on. Boot messages confirm RX wiring; if the router also reacts
    to keypresses, TX is good. (If no output, swap RX/TX — it's the
    usual fix and harmless.)
-3. Power-cycle and interrupt U-Boot within the 5 s `boot_wait` window.
-   The Ralink 1.1.3 menu appears. Typical entries (confirm against your
-   console before acting):
-   - `1` load system code to SDRAM via TFTP (RAM-boot, nothing written)
-   - `2` load system code then **write to flash** via TFTP
-   - `3` boot from flash (default)
-   - `4` U-Boot command line
-   - `7` load **bootloader** then write to flash via TFTP
-   - `9` load bootloader to SDRAM via TFTP (test-run, nothing written)
-4. Put `pb-boot-xiaomi3-20181021-fd6329c.img` in the tftpd64 root.
-5. **Dry run first**: option `9`, server `192.168.1.3`, filename the
-   pb-boot img. It loads into RAM and runs — you should see
-   "PandoraBox-Boot Version 2.1". Confirm its recovery mode comes up
-   (hold reset; web server on `192.168.15.1` — if not, try
-   `192.168.1.1`). Power-cycling discards everything; stock U-Boot is
-   untouched.
-6. Only after the dry run behaves: repeat with option `7` (write to
-   flash). Same file, same server. U-Boot verifies receipt, erases
-   mtd0, writes.
+3. Power-cycle and interrupt U-Boot within the 5 s window. The menu on
+   **this unit** (captured over serial, 2026-08-30) is:
+   - `1` Load system code to SDRAM via TFTP (RAM-boot, nothing written)
+   - `2` Load system code then write to Flash via TFTP
+   - `3` Boot system code via Flash (default)
+   - `4` Enter boot command line interface (`MT7620 #` prompt)
+   - `9` Load Boot Loader code then **write to Flash** via TFTP
+   There is **no RAM-test option for bootloaders** in this menu:
+   option `9` writes mtd0. Do not touch `9` until the dry run below
+   has passed.
+4. Put `pb-boot-xiaomi3-20181021-fd6329c.img` in the tftpd64 root,
+   copied to a short name, e.g. `pbboot.img`.
+5. **Dry run from the CLI** (nothing written): choose `4`, then at
+   `MT7620 #` (command set verified on this unit: `tftpboot`, `bootm`,
+   `go`, `nand`, `setenv`/`saveenv`):
+   ```
+   setenv autostart yes
+   tftpboot 80100000 pbboot.img
+   bootm 80100000
+   ```
+   Expect `Bytes transferred = 138852` from the tftp step. `bootm`
+   parses the uImage header, copies the payload to its load address
+   `0x80200000` and jumps (the pb-boot image is a type-standalone
+   uImage; `autostart yes` makes bootm jump — it is RAM-only unless
+   `saveenv` is run, so never run `saveenv` here). If `bootm` loads
+   but returns to the prompt, `go 80200000` starts it. You should see
+   "PandoraBox-Boot Version 2.1". Look but do not touch: do NOT use
+   any pb-boot menu entry that writes or uploads while running from
+   RAM. Power-cycling discards everything; stock U-Boot is untouched.
+6. Only after the dry run behaves: power-cycle into the menu, choose
+   `9`, and answer the prompts — device IP `192.168.1.1`, server
+   `192.168.1.3`, filename `pbboot.img`. U-Boot receives the file,
+   erases the Bootloader region and writes it. **Do not power off
+   during this step.**
 7. Reboot. pb-boot should bring up X-Wrt exactly as before (it boots
    the same kernel slot scheme). Recovery from now on: hold **reset**
    while powering on → pb-boot HTTPD recovery → upload a
@@ -125,22 +160,36 @@ Risks: you flash a whole firmware to change one DTS flag, and the write
 happens with no fallback bootloader — a power cut mid-write bricks with
 no serial to recover. Only take this path if serial is truly impossible.
 
-## Reverting to X-Wrt (once pb-boot is installed)
+## First ImmortalWrt boot — from RAM, zero flash writes
 
-- Preferred: pb-boot recovery → upload the current X-Wrt factory image
-  from `downloads.x-wrt.com/rom/` (or one built from x-wrt source).
-- Byte-exact restore of today's system: boot any working
-  OpenWrt-family firmware, copy from the backup and write
-  `mtd8.bin → kernel`, `mtd9.bin → ubi`. (`factory`/`Bdata` only if
-  actually damaged.)
+The port ships `ramdisk` support, so the build produces an
+**initramfs image** (`…initramfs-kernel.bin`): a complete ImmortalWrt
+that runs entirely from RAM under the stock bootloader.
 
-## First ImmortalWrt flash (after pb-boot is in place)
+1. Copy the initramfs image to the TFTP root under a short name,
+   e.g. `r3.bin`.
+2. Serial → U-Boot menu → `4`, then:
+   ```
+   tftpboot 84000000 r3.bin
+   bootm 84000000
+   ```
+   Load it **high** (`0x84000000`): the kernel decompresses to
+   `0x80000000`, and a multi-MB image loaded at the default
+   `0x80100000` would overlap its own destination.
+3. Test everything while flash stays untouched: NAND driver probes
+   (`dmesg | grep -i nand`), all 10 mtd partitions visible, `ubiattach`
+   works, both radios up, switch ports mapped, sysupgrade metadata.
+   Power-cycling returns to X-Wrt as if nothing happened.
+4. Permanent install, only after the RAM test passes: from running
+   X-Wrt, `sysupgrade -n` with our `sysupgrade.bin` (identical
+   partition scheme and kernel-slot logic by design — mtd0 is never
+   touched). Keep the serial console attached for the first boot.
 
-1. Build (see README). Take `factory.bin` and `sysupgrade.bin` from
-   `out\`.
-2. Cleanest: pb-boot recovery → upload `factory.bin` (kernel + UBI,
-   both freshly written; no leftover X-Wrt state).
-3. If it misbehaves: pb-boot recovery again → X-Wrt factory image →
-   back where you started. Nothing is burned.
-4. Only after ImmortalWrt is proven: use its own `sysupgrade.bin` for
-   subsequent updates.
+## Reverting to X-Wrt
+
+- From a running ImmortalWrt: `sysupgrade -n` with the X-Wrt sysupgrade
+  image from `downloads.x-wrt.com/rom/`.
+- From a broken system: serial → RAM-boot the initramfs image (above),
+  then restore from the backup: copy `mtd8.bin`/`mtd9.bin` over and
+  `mtd write` them to `kernel`/`ubi`. (`factory`/`Bdata` only if
+  actually damaged.) An X-Wrt initramfs image works for this too.
