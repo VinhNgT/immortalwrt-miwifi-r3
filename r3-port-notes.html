@@ -1,0 +1,769 @@
+<title>Mi Router 3 Port Notes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&display=swap">
+
+<style>
+:root{
+  --paper:#F1F4F5; --surface:#FFFFFF; --surface-2:#E6ECEE;
+  --ink:#14191D; --ink-2:#43515A; --ink-3:#6B7B85;
+  --rule:#D1D9DD; --rule-soft:#E2E8EA;
+  --accent:#B26400; --accent-soft:#FAF0DC; --accent-line:#E0B876;
+  --ok:#1B6E55; --ok-soft:#DEF0E9;
+  --danger:#A81E2A; --danger-soft:#FBE4E5;
+  --code-bg:#E9EEF0; --code-ink:#22303A;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#10151A; --surface:#171E24; --surface-2:#1F282F;
+    --ink:#E4EAEE; --ink-2:#A7B5BE; --ink-3:#788993;
+    --rule:#2B363E; --rule-soft:#212A31;
+    --accent:#F0A83A; --accent-soft:#31250F; --accent-line:#6B5220;
+    --ok:#51C097; --ok-soft:#122A20;
+    --danger:#F0787C; --danger-soft:#2E1517;
+    --code-bg:#0B1015; --code-ink:#C6D3DA;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#10151A; --surface:#171E24; --surface-2:#1F282F;
+  --ink:#E4EAEE; --ink-2:#A7B5BE; --ink-3:#788993;
+  --rule:#2B363E; --rule-soft:#212A31;
+  --accent:#F0A83A; --accent-soft:#31250F; --accent-line:#6B5220;
+  --ok:#51C097; --ok-soft:#122A20;
+  --danger:#F0787C; --danger-soft:#2E1517;
+  --code-bg:#0B1015; --code-ink:#C6D3DA;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:"Source Sans 3",ui-sans-serif,system-ui,sans-serif;
+  font-size:16.5px; line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--accent); text-decoration:none; border-bottom:1px solid var(--accent-line)}
+a:hover{border-bottom-color:var(--accent)}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:2px}
+
+.wrap{max-width:1240px; margin:0 auto; padding:0 28px 96px}
+
+/* ---------- masthead ---------- */
+.mast{padding:56px 0 30px; border-bottom:2px solid var(--ink)}
+.eyebrow{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:11.5px; font-weight:500;
+  letter-spacing:.16em; text-transform:uppercase; color:var(--ink-3); margin:0 0 16px;
+}
+h1{
+  font-family:Archivo,ui-sans-serif,sans-serif; font-weight:700;
+  font-size:clamp(2.1rem,5.2vw,3.5rem); line-height:1.04; letter-spacing:-.022em;
+  margin:0 0 14px; text-wrap:balance;
+}
+.dek{font-size:1.16rem; color:var(--ink-2); max-width:64ch; margin:0}
+
+.statusbar{
+  display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:26px;
+}
+.tag{
+  font-family:"IBM Plex Mono",monospace; font-size:11.5px; font-weight:600;
+  letter-spacing:.08em; text-transform:uppercase;
+  padding:5px 11px; border-radius:2px; border:1px solid var(--rule); color:var(--ink-2);
+  background:var(--surface);
+}
+.tag.hot{background:var(--accent-soft); border-color:var(--accent-line); color:var(--accent)}
+.tag.ok{background:var(--ok-soft); border-color:var(--ok); color:var(--ok)}
+
+/* ---------- verdict ---------- */
+.verdict{
+  margin:34px 0 0; padding:26px 30px; background:var(--surface);
+  border:1px solid var(--rule); border-left:4px solid var(--accent); border-radius:3px;
+}
+.verdict p{margin:0 0 12px; max-width:74ch}
+.verdict p:last-child{margin-bottom:0}
+
+/* ---------- layout ---------- */
+.cols{display:block; margin-top:54px}
+@media(min-width:1060px){
+  .cols{display:grid; grid-template-columns:214px minmax(0,1fr); gap:60px; align-items:start}
+  .toc{position:sticky; top:28px; max-height:calc(100vh - 56px); overflow-y:auto}
+}
+.toc{font-family:"IBM Plex Mono",monospace; font-size:12.5px; line-height:1.5}
+.toc h2{
+  font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--ink-3); font-weight:600; margin:0 0 14px;
+}
+.toc ol{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:9px}
+.toc a{
+  display:flex; gap:9px; color:var(--ink-2); border:none; align-items:baseline;
+}
+.toc a:hover{color:var(--accent)}
+.toc .n{color:var(--ink-3); font-variant-numeric:tabular-nums; flex:none}
+@media(max-width:1059px){
+  .toc{background:var(--surface); border:1px solid var(--rule); padding:20px 22px; border-radius:3px; margin-bottom:44px}
+  .toc ol{display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:9px 22px}
+}
+
+/* ---------- sections ---------- */
+section{margin:0 0 66px; scroll-margin-top:24px}
+h2{
+  font-family:Archivo,sans-serif; font-weight:700; font-size:1.62rem; letter-spacing:-.014em;
+  margin:0 0 6px; display:flex; gap:14px; align-items:baseline; text-wrap:balance;
+}
+h2 .num{
+  font-family:"IBM Plex Mono",monospace; font-size:.78rem; font-weight:500; color:var(--accent);
+  letter-spacing:.06em; flex:none; padding-top:2px;
+}
+.sub{color:var(--ink-3); font-size:.95rem; margin:0 0 22px; padding-left:38px}
+@media(max-width:600px){ h2{flex-direction:column; gap:4px} .sub{padding-left:0} }
+h3{
+  font-family:Archivo,sans-serif; font-weight:600; font-size:1.08rem; letter-spacing:-.005em;
+  margin:32px 0 10px;
+}
+p{margin:0 0 15px; max-width:72ch}
+ul,ol.body{margin:0 0 15px; padding-left:22px; max-width:72ch}
+li{margin-bottom:7px}
+strong{font-weight:600}
+em{font-style:italic; color:var(--ink-2)}
+
+/* ---------- code ---------- */
+code{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.855em;
+  background:var(--code-bg); color:var(--code-ink); padding:1px 5px; border-radius:2px;
+}
+pre{
+  background:var(--code-bg); color:var(--code-ink); border:1px solid var(--rule-soft);
+  border-radius:3px; padding:16px 18px; overflow-x:auto; margin:0 0 18px;
+  font-family:"IBM Plex Mono",monospace; font-size:12.8px; line-height:1.62;
+}
+pre code{background:none; padding:0; font-size:inherit}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto; margin:0 0 20px; border:1px solid var(--rule); border-radius:3px; background:var(--surface)}
+table{border-collapse:collapse; width:100%; font-size:14.6px}
+th,td{text-align:left; padding:11px 15px; border-bottom:1px solid var(--rule-soft); vertical-align:top}
+thead th{
+  font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.13em;
+  text-transform:uppercase; color:var(--ink-3); font-weight:600;
+  background:var(--surface-2); border-bottom:1px solid var(--rule); white-space:nowrap;
+}
+tbody tr:last-child td{border-bottom:none}
+td code{font-size:12.4px; white-space:nowrap}
+.num-col{font-variant-numeric:tabular-nums; white-space:nowrap}
+
+/* ---------- callouts ---------- */
+.note{
+  border:1px solid var(--rule); border-left:3px solid var(--ink-3); background:var(--surface);
+  padding:16px 20px; border-radius:3px; margin:0 0 20px;
+}
+.note.warn{border-left-color:var(--danger); background:var(--danger-soft)}
+.note.good{border-left-color:var(--ok); background:var(--ok-soft)}
+.note.key{border-left-color:var(--accent); background:var(--accent-soft)}
+.note p{margin:0; max-width:70ch}
+.note p + p{margin-top:10px}
+.note .lbl{
+  font-family:"IBM Plex Mono",monospace; font-size:10.5px; font-weight:600;
+  letter-spacing:.13em; text-transform:uppercase; display:block; margin-bottom:7px; color:var(--ink-3);
+}
+.note.warn .lbl{color:var(--danger)}
+.note.good .lbl{color:var(--ok)}
+.note.key .lbl{color:var(--accent)}
+
+/* corrections list */
+.corr{list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:18px}
+.corr > li{
+  background:var(--surface); border:1px solid var(--rule); border-left:3px solid var(--danger);
+  border-radius:3px; padding:18px 22px; margin:0; max-width:none;
+}
+.corr h3{margin:0 0 8px; font-size:1rem; color:var(--danger)}
+.corr p:last-child{margin-bottom:0}
+.corr ul{margin-bottom:10px}
+
+/* facts strip */
+.facts{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr));
+  gap:1px; background:var(--rule); border:1px solid var(--rule); border-radius:3px;
+  margin:0 0 26px; overflow:hidden;
+}
+.facts div{background:var(--surface); padding:15px 18px}
+.facts dt{
+  font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.13em;
+  text-transform:uppercase; color:var(--ink-3); margin-bottom:5px;
+}
+.facts dd{margin:0; font-weight:600; font-size:.97rem; line-height:1.35}
+.facts dd small{display:block; font-weight:400; color:var(--ink-3); font-size:.8rem; margin-top:2px}
+
+/* figures */
+figure{margin:26px 0 24px}
+figure svg{width:100%; height:auto; display:block; color:var(--ink)}
+figcaption{
+  font-size:13.4px; color:var(--ink-3); margin-top:12px; max-width:72ch;
+  padding-left:12px; border-left:2px solid var(--rule);
+}
+.figbox{background:var(--surface); border:1px solid var(--rule); border-radius:3px; padding:22px 20px 16px; overflow-x:auto}
+
+footer{
+  margin-top:70px; padding-top:26px; border-top:1px solid var(--rule);
+  color:var(--ink-3); font-size:13.6px;
+}
+footer p{max-width:74ch}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow">Hardware notes · ramips / mt7620 · compiled 2026-08-30</p>
+  <h1>Getting ImmortalWrt onto a Xiaomi Mi Router 3</h1>
+  <p class="dek">Why this device fell off every modern OpenWrt release, exactly what it would take to put it back, and why the work was parked.</p>
+  <div class="statusbar">
+    <span class="tag hot">Status: parked</span>
+    <span class="tag ok">Backup verified</span>
+    <span class="tag">Nothing flashed</span>
+    <span class="tag">Running X-Wrt 26.04 · Linux 6.18.44</span>
+  </div>
+</header>
+
+<div class="verdict">
+  <p><strong>The port is small and well-understood</strong> — two cherry-picked commits from X-Wrt into ImmortalWrt. That part is an afternoon's work.</p>
+  <p><strong>The risk is not.</strong> This unit has no recovery mechanism at all beyond a $3 USB-TTL serial adapter that isn't owned yet. No Breed exists for it, its USB recovery was destroyed by the current firmware, and its second kernel slot is dead. A first-ever ImmortalWrt build for a device nobody has ever built it for failing to boot is a normal outcome, not a remote one — and there would be no way back.</p>
+  <p>For a $5 used router already running current, maintained firmware, that trade wasn't worth making. Everything below is preserved so none of it needs re-researching.</p>
+</div>
+
+<div class="cols">
+
+<nav class="toc" aria-label="Contents">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#s1"><span class="n">01</span> The device</a></li>
+    <li><a href="#s2"><span class="n">02</span> This unit</a></li>
+    <li><a href="#s3"><span class="n">03</span> The backup</a></li>
+    <li><a href="#s4"><span class="n">04</span> Why it's missing</a></li>
+    <li><a href="#s5"><span class="n">05</span> X-Wrt's delta</a></li>
+    <li><a href="#s6"><span class="n">06</span> Port recipe</a></li>
+    <li><a href="#s7"><span class="n">07</span> Corrections</a></li>
+    <li><a href="#s8"><span class="n">08</span> Recovery reality</a></li>
+    <li><a href="#s9"><span class="n">09</span> pb-boot</a></li>
+    <li><a href="#s10"><span class="n">10</span> Ranked approaches</a></li>
+    <li><a href="#s11"><span class="n">11</span> Open questions</a></li>
+    <li><a href="#s12"><span class="n">12</span> Reference</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<!-- ============ 1 ============ -->
+<section id="s1">
+  <h2><span class="num">01</span> The device</h2>
+  <p class="sub">Xiaomi Mi Router 3 — “R3” only. Not the 3G / 3C / 3A / 3P, which are different SoCs and share almost nothing with this.</p>
+
+  <div class="facts">
+    <div><dt>SoC</dt><dd>MT7620A<small>MIPS 24KEc @ 580 MHz · little-endian (mipsel_24kc)</small></dd></div>
+    <div><dt>RAM</dt><dd>128 MiB<small>DDR2</small></dd></div>
+    <div><dt>Flash</dt><dd>128 MiB raw NAND<small>ESMT F59L1G81LA · parallel, not SPI-NAND</small></dd></div>
+    <div><dt>WiFi 5 GHz</dt><dd>MT7612E<small>PCIe · kmod-mt76x2</small></dd></div>
+    <div><dt>WiFi 2.4 GHz</dt><dd>MT7620A integrated<small>rt2x00 · kmod-rt2800-soc</small></dd></div>
+    <div><dt>Ethernet</dt><dd>3 × 100 Mbit<small>built-in switch · portmap "llllw"</small></dd></div>
+  </div>
+
+  <p>The parallel NAND is the entire problem. Every other part of this device is ordinary <code>ramips/mt7620</code> and works on current kernels. OpenWrt's Table of Hardware lists the R3 as <strong>not supported</strong> and points users at PandoraBox or X-Wrt.</p>
+</section>
+
+<!-- ============ 2 ============ -->
+<section id="s2">
+  <h2><span class="num">02</span> State of this unit</h2>
+  <p class="sub">All verified on-device, 2026-08-30.</p>
+
+  <h3>Running firmware</h3>
+<pre><code>Linux X-WRT 6.18.44 #0 Sat Aug 22 11:43:50 2026 mips GNU/Linux
+x-wrt-26.04-b202608221937-ramips-mt7620-xiaomi_miwifi-r3-squashfs-sysupgrade.bin</code></pre>
+  <p>From <a href="https://downloads.x-wrt.com/rom/">downloads.x-wrt.com/rom/</a> — that URL rotates as new builds publish.</p>
+
+  <h3>Bootloader — stock, not Breed, not pb-boot</h3>
+<pre><code>U-Boot 1.1.3 (Apr 15 2016 - 17:46:32)
+Ralink UBoot Version: ...
+Board: Ralink APSoC</code></pre>
+  <p><strong>mtd0 is uImage-wrapped.</strong> The header sitting at flash offset 0:</p>
+<pre><code>magic 27 05 19 56 | load/entry 0x80200000 | os=05 arch=05 type=01 comp=00 | name "NAND Fla"
+payload 93,320 B  | ts 0x5710b880 = 2016-04-15 (matches the U-Boot build string)
+payload begins 0x100000ff   -- little-endian MIPS: b +0x400</code></pre>
+
+  <h3>Flash layout</h3>
+  <div class="tw"><table>
+    <thead><tr><th>mtd</th><th>Offset</th><th>Size</th><th>Name</th><th>Contents / note</th></tr></thead>
+    <tbody>
+      <tr><td class="num-col"><code>0</code></td><td class="num-col"><code>0x000000</code></td><td class="num-col">256K</td><td><code>Bootloader</code></td><td>stock Ralink U-Boot · <strong>read-only under X-Wrt</strong></td></tr>
+      <tr><td class="num-col"><code>1</code></td><td class="num-col"><code>0x040000</code></td><td class="num-col">256K</td><td><code>Config</code></td><td>U-Boot environment</td></tr>
+      <tr><td class="num-col"><code>2</code></td><td class="num-col"><code>0x080000</code></td><td class="num-col">256K</td><td><code>Bdata</code></td><td></td></tr>
+      <tr><td class="num-col"><code>3</code></td><td class="num-col"><code>0x0c0000</code></td><td class="num-col">256K</td><td><code>factory</code></td><td><strong>RF calibration + MAC — unique, irreplaceable</strong></td></tr>
+      <tr><td class="num-col"><code>4</code></td><td class="num-col"><code>0x100000</code></td><td class="num-col">256K</td><td><code>crash</code></td><td></td></tr>
+      <tr><td class="num-col"><code>5</code></td><td class="num-col"><code>0x140000</code></td><td class="num-col">256K</td><td><code>crash_syslog</code></td><td></td></tr>
+      <tr><td class="num-col"><code>6</code></td><td class="num-col"><code>0x180000</code></td><td class="num-col">512K</td><td><code>reserved0</code></td><td></td></tr>
+      <tr><td class="num-col"><code>7</code></td><td class="num-col"><code>0x200000</code></td><td class="num-col">4M</td><td><code>kernel_stock</code></td><td>slot 0 — <code>MIPS OpenWrt Linux-2.6.36</code>, 2016-04-15. <strong>Dead.</strong></td></tr>
+      <tr><td class="num-col"><code>8</code></td><td class="num-col"><code>0x600000</code></td><td class="num-col">4M</td><td><code>kernel</code></td><td>slot 1 — <code>MIPS X-WRT Linux-6.18.44</code>, running</td></tr>
+      <tr><td class="num-col"><code>9</code></td><td class="num-col"><code>0xa00000</code></td><td class="num-col">118M</td><td><code>ubi</code></td><td>rootfs 8.7 MiB + rootfs_data 102.6 MiB</td></tr>
+    </tbody>
+  </table></div>
+  <p>Exactly 128 MiB. Erase block 128K, page 2048 B. UBI reports <strong>0 bad physical eraseblocks</strong> — the NAND is in perfect health after roughly nine years.</p>
+
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 900 310" role="img" aria-label="Comparison of the stock Xiaomi flash layout against the current X-Wrt layout, showing that rootfs0, rootfs1 and overlay were merged into a single UBI partition, destroying the system that provided USB recovery.">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <!-- row A -->
+        <text x="40" y="30" font-family="IBM Plex Mono, monospace" font-size="11.5" font-weight="600" fill="currentColor" letter-spacing="1.4">STOCK XIAOMI</text>
+        <g font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor">
+          <rect x="40"  y="46" width="90"  height="42" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55"/>
+          <text x="85"  y="72" text-anchor="middle" opacity=".75">boot/cfg</text>
+          <rect x="130" y="46" width="60"  height="42" fill="none" stroke="#B26400" stroke-width="1.8"/>
+          <text x="160" y="72" text-anchor="middle" fill="#B26400" font-weight="600">factory</text>
+          <rect x="190" y="46" width="80"  height="42" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55"/>
+          <text x="230" y="72" text-anchor="middle" opacity=".75">crash…</text>
+          <rect x="270" y="46" width="90"  height="42" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="315" y="72" text-anchor="middle">kernel0</text>
+          <rect x="360" y="46" width="90"  height="42" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="405" y="72" text-anchor="middle">kernel1</text>
+          <rect x="450" y="46" width="130" height="42" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="515" y="72" text-anchor="middle">rootfs0</text>
+          <rect x="580" y="46" width="130" height="42" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="645" y="72" text-anchor="middle">rootfs1</text>
+          <rect x="710" y="46" width="150" height="42" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="785" y="72" text-anchor="middle">overlay</text>
+        </g>
+
+        <!-- callout on kernel0+rootfs0 -->
+        <line x1="315" y1="98" x2="315" y2="116" stroke="#B26400" stroke-width="1.3"/>
+        <line x1="515" y1="98" x2="515" y2="116" stroke="#B26400" stroke-width="1.3"/>
+        <line x1="315" y1="116" x2="515" y2="116" stroke="#B26400" stroke-width="1.3"/>
+        <text x="415" y="132" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="#B26400" font-weight="600">USB recovery (miwifi.bin) lived here</text>
+
+        <!-- merge bracket -->
+        <line x1="450" y1="150" x2="450" y2="166" stroke="currentColor" stroke-width="1.2" opacity=".6"/>
+        <line x1="860" y1="150" x2="860" y2="166" stroke="currentColor" stroke-width="1.2" opacity=".6"/>
+        <line x1="450" y1="166" x2="860" y2="166" stroke="currentColor" stroke-width="1.2" opacity=".6"/>
+        <line x1="655" y1="166" x2="655" y2="196" stroke="currentColor" stroke-width="1.4" marker-end="url(#ar)"/>
+        <text x="668" y="184" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="currentColor" opacity=".8">squashed into one UBI</text>
+
+        <!-- row B -->
+        <text x="40" y="222" font-family="IBM Plex Mono, monospace" font-size="11.5" font-weight="600" fill="currentColor" letter-spacing="1.4">NOW — X-WRT 26.04</text>
+        <g font-family="IBM Plex Mono, monospace" font-size="11" fill="currentColor">
+          <rect x="40"  y="238" width="90"  height="42" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55"/>
+          <text x="85"  y="264" text-anchor="middle" opacity=".75">boot/cfg</text>
+          <rect x="130" y="238" width="60"  height="42" fill="none" stroke="#B26400" stroke-width="1.8"/>
+          <text x="160" y="264" text-anchor="middle" fill="#B26400" font-weight="600">factory</text>
+          <rect x="190" y="238" width="80"  height="42" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55"/>
+          <text x="230" y="264" text-anchor="middle" opacity=".75">crash…</text>
+          <rect x="270" y="238" width="90"  height="42" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="4 3" opacity=".55"/>
+          <text x="315" y="258" text-anchor="middle" opacity=".7">kernel_stock</text>
+          <text x="315" y="272" text-anchor="middle" font-size="9.5" opacity=".7">2.6.36 · dead</text>
+          <rect x="360" y="238" width="90"  height="42" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <text x="405" y="258" text-anchor="middle" font-weight="600">kernel</text>
+          <text x="405" y="272" text-anchor="middle" font-size="9.5">6.18.44</text>
+          <rect x="450" y="238" width="410" height="42" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <text x="655" y="264" text-anchor="middle" font-weight="600">ubi — 118 MiB</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption>The single most consequential fact about this unit. X-Wrt merged the stock <code>rootfs0</code>, <code>rootfs1</code> and <code>overlay</code> into one UBI partition, which destroyed the Xiaomi system that implemented USB recovery and left the second kernel slot holding a 2016 kernel with nothing to mount.</figcaption>
+  </figure>
+
+  <h3>U-Boot environment</h3>
+  <p><code>fw_printenv</code> and <code>fw_setenv</code> both work.</p>
+<pre><code>bootcmd=tftp            bootdelay=5
+ipaddr=192.168.1.1      serverip=192.168.1.3
+uart_en=1               boot_wait=on
+stdin/stdout/stderr=serial
+model=R3                os1_version=2.11.20
+flag_boot_success=1     flag_last_success=1
+flag_try_sys1_failed=0  flag_try_sys2_failed=0</code></pre>
+  <div class="note good">
+    <span class="lbl">Already done for you</span>
+    <p>The serial console is <strong>already enabled</strong>, with a 5-second interrupt window and the TFTP recovery IPs preconfigured. An adapter is plug-and-go — no preparatory flashing required.</p>
+  </div>
+
+  <h3>mtd0 is read-only</h3>
+<pre><code>/sys/class/mtd/mtd0/flags = 0x0        # MTD_WRITEABLE is 0x400 — not set</code></pre>
+  <p>X-Wrt's DTS marks <code>partition@0</code> as <code>read-only</code>, so <code>mtd write … Bootloader</code> returns <code>EROFS</code>. Any bootloader replacement has to come from U-Boot itself over serial, or from a custom build with that property removed.</p>
+</section>
+
+<!-- ============ 3 ============ -->
+<section id="s3">
+  <h2><span class="num">03</span> The backup</h2>
+  <p class="sub">The most valuable artifact produced by this whole exercise.</p>
+
+  <p><code>D:\r3-backup\</code> — all ten partitions, <strong>md5-verified OK on the PC side</strong>. Router-side tar <code>r3-backup.tar</code>, md5 <code>65530a59773e0761ee32cb0bc24ad03d</code>, 134,229,504 bytes.</p>
+
+  <div class="note key">
+    <span class="lbl">Keep this even if the router is scrapped</span>
+    <p><code>mtd3.bin</code> is the <code>factory</code> partition: 256 KB of RF calibration data and the MAC address, unique to this physical unit and unobtainable if lost. Without it the radios never come back properly. It could only be read because a working NAND driver was running at the time.</p>
+  </div>
+
+  <p>Restoring a small partition from a booted system:</p>
+<pre><code>mtd write /tmp/mtd3.bin factory</code></pre>
+  <p>Note that mtd0 cannot be restored this way while running X-Wrt, for the read-only reason above.</p>
+</section>
+
+<!-- ============ 4 ============ -->
+<section id="s4">
+  <h2><span class="num">04</span> Why the R3 isn't in ImmortalWrt 25.12.1</h2>
+  <p class="sub">One blocker: there is no MT7620 raw-NAND controller driver in any modern tree.</p>
+
+  <p><code>ramips/mt7620</code> in both OpenWrt main and ImmortalWrt 25.12.1 contains <strong>zero</strong> NAND/UBI devices — every mt7620 device upstream is SPI-NOR. The directory <code>target/linux/ramips/files/drivers/mtd/nand/raw/</code> holds exactly one file, <code>mt7621_nand.c</code>.</p>
+
+  <p>R3 images are absent from ImmortalWrt <strong>21.02.7, 23.05.6, 24.10.4, 25.12.0 and 25.12.1</strong>, and present only in <code>18.06-k5.4-SNAPSHOT</code>. This was never a 25.12 regression — ImmortalWrt only ever carried the R3 on its legacy branch.</p>
+
+  <h3>How the driver left the tree</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Commit</th><th>Date</th><th>What happened</th></tr></thead>
+    <tbody>
+      <tr><td><code>f307b35c8bca</code></td><td class="num-col">2013-11-18</td><td>“ralink: add mt7620 nand driver”. Its own commit message: <em>“a minor rework of the SDK driver. This driver needs a full rewrite.”</em></td></tr>
+      <tr><td colspan="2"><strong>In-tree through kernel 4.4</strong></td><td><code>drivers/mtd/maps/ralink_nand.c</code>, <code>CONFIG_MTD_NAND_MT7620=y</code>. Two supported boards used it: Sercomm NA930 and the Ralink MT7620a V22SG EVB.</td></tr>
+      <tr><td><code>9c24227090</code></td><td class="num-col">2017-02-13</td><td>“ramips: add v4.9 support” — commit body reads, in full, <em>“NAND support is missing”</em>.</td></tr>
+      <tr><td><code>fddc78bc11</code></td><td class="num-col">2017-07-05</td><td>“ramips: bump to v4.9” deletes <code>patches-4.4/</code> including the 2,408-line NAND patch.</td></tr>
+      <tr><td><code>9bc9457b85</code></td><td class="num-col">2017-06-01</td><td>NAND restored — <strong>for MT7621 only</strong>.</td></tr>
+      <tr><td><code>dea9922acd</code></td><td class="num-col">2018-04-06</td><td>Drops 4.9, removing the now-dead <code>CONFIG_MTD_NAND_MT7620</code> line.</td></tr>
+      <tr><td><code>10f27c6f00</code></td><td class="num-col">2020-04-01</td><td>New clean MT7621 NAND driver.</td></tr>
+      <tr><td><code>2f2e81a4ea</code></td><td class="num-col">2022-01-19</td><td>Moves it to <code>files/drivers/mtd/nand/raw/mt7621_nand.c</code>, where it lives today.</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>Orphaned to this day: <code>compatible = "mtk,mt7620-nand"</code> still appears in <code>mt7620a_sercomm_na930.dts</code> and <code>mt7620a_ralink_mt7620a-v22sg-evb.dts</code> with no driver behind it.</p>
+
+  <h3>Two upstream attempts, both rejected</h3>
+  <p><a href="https://github.com/openwrt/openwrt/pull/597">openwrt/openwrt#597</a> — “Mir3 support” by <strong>ptpt52</strong>, opened 2018-01-03, closed unmerged 2018-07-25. ptpt52 subsequently founded X-Wrt, which is exactly why X-Wrt has the R3 and OpenWrt does not.</p>
+
+  <p><a href="https://github.com/openwrt/openwrt/pull/9344">openwrt/openwrt#9344</a> (2022) is the substantive one. Daniel Golle:</p>
+  <div class="note">
+    <p><em>“space limitations on other MT7620 boards … will force us to have an additional subtarget <code>ramips/mt7620-nand</code> … as enabling that for all mt7620 boards will break many devices. All that seemed too much effort only to allow support of basically this one device. Imho it's a good candidate for a community build.”</em></p>
+    <p><em>“the NAND driver is in very bad shape and unfit for submission upstream.”</em></p>
+  </div>
+  <p>The space concern is quantitatively real: <strong>75 of the 137</strong> <code>IMAGE_SIZE</code> declarations in <code>mt7620.mk</code> are 8192k or smaller.</p>
+</section>
+
+<!-- ============ 5 ============ -->
+<section id="s5">
+  <h2><span class="num">05</span> What X-Wrt carries that ImmortalWrt doesn't</h2>
+  <p class="sub">One 2,113-line driver that sidesteps the kernel's NAND framework entirely.</p>
+
+  <p><code>target/linux/ramips/files/drivers/mtd/maps/ralink_nand.c</code>, plus its header. Its defining property explains both why upstream refuses it and why it never breaks:</p>
+
+  <div class="note key">
+    <span class="lbl">The key property</span>
+    <p>It <strong>bypasses the Linux rawnand framework completely</strong> — its own <code>struct ra_nand_chip</code>, its own bad-block table, its own read/write/erase, registering a bare <code>struct mtd_info</code>. That is why maintainers call it unfit for upstream, and equally why it has survived 5.10 → 6.18 essentially untouched.</p>
+  </div>
+
+  <ul>
+    <li><code>compatible = "mtk,mt7620-nand"</code>, <code>module_platform_driver</code>, MTD name <code>ra_nfc</code>.</li>
+    <li>Partition probes are <code>{ "cmdlinepart", "ofpart", NULL }</code> — <strong>cmdlinepart takes priority over the device tree</strong>.</li>
+    <li>Carries explicit <code>LINUX_VERSION_CODE &gt;= KERNEL_VERSION(6,12,0)</code> guards and a local <code>struct nand_ecclayout</code> replacing the one the kernel removed.</li>
+    <li>Lives in <code>files/</code>, kernel-agnostic — there is no <code>files-*</code> directory anywhere in x-wrt's ramips.</li>
+    <li>The Kconfig/Makefile hook patch is <strong>18 lines</strong>, with variants for 6.1, 6.6, 6.12 and 6.18.</li>
+  </ul>
+
+  <p>Author date 2017-11-18, <strong>committer date 2026-08-29</strong> — x-wrt continuously rebases its whole patch stack onto current OpenWrt. This is live code, not abandonware.</p>
+
+  <p>ImmortalWrt's own <code>openwrt-18.06-k5.4</code> branch carries the identical patch filename, with the driver embedded in the patch rather than in <code>files/</code>. So this is ImmortalWrt-lineage code too — a PR would be asking them to forward-port their own patch.</p>
+</section>
+
+<!-- ============ 6 ============ -->
+<section id="s6">
+  <h2><span class="num">06</span> The port recipe</h2>
+  <p class="sub">Two commits, eight files. The only real decision is which kernel to target.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>Tree</th><th>KERNEL_PATCHVER</th><th>Note</th></tr></thead>
+    <tbody>
+      <tr><td>X-Wrt master <em>(what this unit runs)</em></td><td class="num-col"><strong>6.18</strong></td><td>proven on this hardware</td></tr>
+      <tr><td>ImmortalWrt master</td><td class="num-col"><strong>6.18</strong></td><td>like-for-like kernel match</td></tr>
+      <tr><td>ImmortalWrt <code>openwrt-25.12</code></td><td class="num-col">6.12</td><td>untested combination</td></tr>
+      <tr><td>OpenWrt main</td><td class="num-col">6.18</td><td></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note key">
+    <span class="lbl">Target master, not 25.12</span>
+    <p>ImmortalWrt master is on 6.18 — the same kernel as the X-Wrt build demonstrably working on this unit. Going there changes one variable (the distro) instead of two. X-Wrt's mt7620 subtarget has <em>only</em> <code>config-6.18</code> and cannot build at 6.12, so the 6.12 path is untested by anyone. Backport to 25.12 afterwards as a separate, debuggable step.</p>
+  </div>
+
+  <h3>The lift: two x-wrt commits</h3>
+  <ul>
+    <li><code>387988e8c956</code> — the driver (11 files)</li>
+    <li><code>f4fc1766f08a</code> — the device (5 files)</li>
+  </ul>
+
+  <h3>The eight touch points</h3>
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>File</th><th>Change</th></tr></thead>
+    <tbody>
+      <tr><td class="num-col">1</td><td><code>…/files/drivers/mtd/maps/ralink_nand.c</code></td><td>new, from x-wrt</td></tr>
+      <tr><td class="num-col">2</td><td><code>…/files/drivers/mtd/maps/ralink_nand.h</code></td><td>new, from x-wrt</td></tr>
+      <tr><td class="num-col">3</td><td><code>…/patches-6.18/0038-mtd-ralink-add-mt7620-nand-driver.patch</code></td><td>new, 18 lines</td></tr>
+      <tr><td class="num-col">4</td><td><code>…/dts/mt7620a_xiaomi_miwifi-r3.dts</code></td><td>new — <strong>take x-wrt master's</strong>, already modernized to <code>nvmem-layout</code>. The 18.06-k5.4 version still uses the removed <code>ralink,mtd-eeprom</code> bindings; they differ by only 52 diff lines.</td></tr>
+      <tr><td class="num-col">5</td><td><code>…/image/mt7620.mk</code></td><td>add <code>Device/xiaomi_miwifi-r3</code></td></tr>
+      <tr><td class="num-col">6</td><td><code>…/mt7620/target.mk</code></td><td><code>FEATURES+=usb ramdisk</code> → <code>FEATURES+=usb nand ramdisk</code></td></tr>
+      <tr><td class="num-col">7</td><td><code>…/mt7620/config-6.18</code></td><td><code>CONFIG_MTD_NAND_MT7620=y</code>, <code>CONFIG_MTD_UBI=y</code>, <code>CONFIG_MTD_UBI_BLOCK=y</code>, <code>CONFIG_MTD_UBI_BEB_LIMIT=20</code>, <code>CONFIG_MTD_UBI_WL_THRESHOLD=4096</code>, <code>CONFIG_UBIFS_FS=y</code>, <code>CONFIG_UBIFS_FS_ADVANCED_COMPR=y</code></td></tr>
+      <tr><td class="num-col">8</td><td><code>…/mt7620/base-files/lib/upgrade/platform.sh</code></td><td>add <code>xiaomi,miwifi-r3)</code> case calling <code>nand_do_upgrade</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <p>On #6: adding <code>nand</code> to the shared subtarget is fine for a personal build, since only the R3 profile gets compiled — but it is exactly what would sink an upstream PR. A PR-quality version needs a separate <code>ramips/mt7620-nand</code> subtarget.</p>
+
+  <p>Reassuringly, ImmortalWrt 25.12's <strong>mt7621</strong> subtarget already has <code>FEATURES+=nand</code> and 46 UBI device recipes, so the whole ubinize / UBI / <code>nand_do_upgrade</code> image pipeline is proven working in the target tree.</p>
+
+  <h3>Device recipe</h3>
+<pre><code>define Device/xiaomi_miwifi-r3
+  SOC := mt7620a
+  BLOCKSIZE := 128k
+  PAGESIZE := 2048
+  KERNEL_SIZE := 4096k
+  IMAGE_SIZE := 32768k
+  UBINIZE_OPTS := -E 5
+  IMAGES += kernel1.bin rootfs0.bin breed-factory.bin factory.bin
+  IMAGE/kernel1.bin := append-kernel | check-size $$$$(KERNEL_SIZE)
+  IMAGE/rootfs0.bin := append-ubi | check-size
+  IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+  IMAGE/factory.bin := append-kernel | pad-to $$(KERNEL_SIZE) | append-ubi | check-size
+  IMAGE/breed-factory.bin := append-kernel | pad-to $$(KERNEL_SIZE) | \
+                             append-kernel | pad-to $$(KERNEL_SIZE) | \
+                             append-ubi | check-size
+  DEVICE_VENDOR := Xiaomi
+  DEVICE_MODEL := Mi Router R3
+  DEVICE_PACKAGES := kmod-mt76x2 kmod-usb2 kmod-usb-ohci uboot-envtools
+endef
+TARGET_DEVICES += xiaomi_miwifi-r3</code></pre>
+  <p><code>breed-factory.bin</code> is <strong>two kernel copies followed by the UBI</strong> — precisely the pb-boot / Breed full-flash format.</p>
+
+  <h3>sysupgrade case</h3>
+<pre><code>xiaomi,miwifi-r3)
+	# this make it compatible with breed
+	dd if=/dev/mtd0 bs=64 count=1 2>/dev/null | grep -qi breed &amp;&amp; CI_KERNPART_EXT="kernel_stock"
+	dd if=/dev/mtd7 bs=64 count=1 2>/dev/null | grep -o MIPS.*Linux | grep -qi X-WRT &amp;&amp; CI_KERNPART_EXT="kernel_stock"
+	dd if=/dev/mtd7 bs=64 count=1 2>/dev/null | grep -o MIPS.*Linux | grep -qi NATCAP &amp;&amp; CI_KERNPART_EXT="kernel0_rsvd"
+	dd if=/dev/mtd0 2>/dev/null | grep -qi pb-boot &amp;&amp; CI_KERNPART_EXT="kernel_stock"
+	nand_do_upgrade "$1"
+	;;</code></pre>
+  <p>With stock U-Boot the firmware lands in <code>kernel</code> (mtd8); with Breed or pb-boot present it lands in <code>kernel_stock</code> (mtd7) instead.</p>
+</section>
+
+<!-- ============ 7 ============ -->
+<section id="s7">
+  <h2><span class="num">07</span> Corrections</h2>
+  <p class="sub">Things that looked true during this investigation and are wrong. Read this before re-researching anything.</p>
+
+  <ol class="corr">
+    <li>
+      <h3>“Extend mt7621_nand.c to MT7620” — does not work</h3>
+      <p>These are different IP generations, not variants. The MT7620 Programming Guide against <code>mt7621_nand.c</code>:</p>
+      <figure>
+        <div class="figbox">
+          <svg viewBox="0 0 880 250" role="img" aria-label="Side-by-side comparison showing the MT7620 has a single 256-byte NAND controller with software-corrected Hamming ECC, while the MT7621 has a 2KB NFI plus a separate 2KB hardware BCH ECC engine at addresses that are marked Reserved on the MT7620.">
+            <g font-family="IBM Plex Mono, monospace" fill="currentColor">
+              <!-- MT7620 -->
+              <text x="30" y="26" font-size="12" font-weight="600" letter-spacing="1.2">MT7620A</text>
+              <rect x="30" y="42" width="360" height="46" fill="none" stroke="#B26400" stroke-width="1.8"/>
+              <text x="46" y="62" font-size="11.5" fill="#B26400" font-weight="600">NAND Controller</text>
+              <text x="46" y="79" font-size="11" fill="#B26400">0x1000_0800 · 256 bytes</text>
+
+              <rect x="30" y="100" width="176" height="40" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3" opacity=".5"/>
+              <text x="118" y="124" font-size="10.5" text-anchor="middle" opacity=".65">0x1000_3000 reserved</text>
+              <rect x="214" y="100" width="176" height="40" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3" opacity=".5"/>
+              <text x="302" y="124" font-size="10.5" text-anchor="middle" opacity=".65">0x1000_3800 reserved</text>
+
+              <text x="30" y="170" font-size="11">ECC: Hamming, 24-bit / 512 B</text>
+              <text x="30" y="188" font-size="11">1-bit correction, in <tspan font-weight="600">software</tspan></text>
+              <text x="30" y="206" font-size="11" opacity=".7">no separate ECC engine</text>
+
+              <!-- divider -->
+              <line x1="440" y1="30" x2="440" y2="220" stroke="currentColor" stroke-width="1" opacity=".25"/>
+
+              <!-- MT7621 -->
+              <text x="490" y="26" font-size="12" font-weight="600" letter-spacing="1.2">MT7621</text>
+              <rect x="490" y="42" width="176" height="46" fill="none" stroke="currentColor" stroke-width="1.6"/>
+              <text x="506" y="62" font-size="11.5" font-weight="600">NFI</text>
+              <text x="506" y="79" font-size="11">0x1e003000 · 2 KB</text>
+              <rect x="674" y="42" width="176" height="46" fill="none" stroke="currentColor" stroke-width="1.6"/>
+              <text x="690" y="62" font-size="11.5" font-weight="600">ECC engine</text>
+              <text x="690" y="79" font-size="11">0x1e003800 · 2 KB</text>
+
+              <text x="490" y="170" font-size="11">ECC: BCH, strength 4 / 6 / 8 / 10 / 12</text>
+              <text x="490" y="188" font-size="11">correction in <tspan font-weight="600">hardware</tspan></text>
+              <text x="490" y="206" font-size="11" opacity=".7">hardware error-location readback</text>
+            </g>
+            <text x="440" y="240" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="600" fill="#B26400">zero shared register offsets · 0 of 1,344 lines transfer</text>
+          </svg>
+        </div>
+        <figcaption>The windows where the MT7621 places its NFI and ECC engine are marked <em>Reserved</em> on the MT7620, which has a single 256-byte controller and no ECC hardware at all. A proper driver is a from-scratch job; the only genuinely reusable piece is <code>mtk_bmt</code>, which is controller-independent.</figcaption>
+      </figure>
+      <p>ptpt52 only ever tested <code>mediatek,mt2701-nfc</code> back in 2018 — <code>mt7621-nfc</code> did not exist yet, but it would not have helped either.</p>
+    </li>
+
+    <li>
+      <h3>“USB recovery will save me” — not on this unit</h3>
+      <p>Scanning the whole bootloader partition for <code>usb</code>, <code>fat</code>, <code>miwifi.bin</code> or <code>storage</code> returns only <code>uboot.bin</code>, <code>test.bin</code> and <code>saveenv</code> help text. <strong>There is no USB stack or FAT support in this bootloader.</strong> That recovery was a feature of Xiaomi's stock system living in kernel0 + rootfs0 — which X-Wrt overwrote. It worked before X-Wrt. It does not work now.</p>
+    </li>
+
+    <li>
+      <h3>“There's a Breed for the R3” — there isn't</h3>
+      <p>breed.hackpascal.net has <code>breed-mt7620-xiaomi-mini.bin</code> (Mi Router <strong>Mini</strong>, SPI-NOR) and <code>breed-mt7621-xiaomi-r3g.bin</code> (Mi Router <strong>3G</strong>, MT7621). The only NAND-capable Breed on the entire site is for Atheros AR9344. Flashing either wrong-device image to mtd0 is an unrecoverable brick. <strong>pb-boot is the R3's web-recovery bootloader</strong>, not Breed.</p>
+    </li>
+
+    <li>
+      <h3>“OpenWrt never had an MT7620 NAND driver” — wrong</h3>
+      <p>It shipped in-tree through kernel 4.4 with two supported boards. See section 04.</p>
+    </li>
+
+    <li>
+      <h3>“mt7620 on 6.12 has a bad WiFi regression” — fixed</h3>
+      <p><a href="https://github.com/openwrt/openwrt/issues/19128">openwrt/openwrt#19128</a> (20–30% throughput loss from <code>mtk_eth_soc</code> buffer corruption setting <code>ihl</code> to 0) is closed <em>and</em> fixed, and the fix ships in 25.12.1. Not a blocker.</p>
+    </li>
+
+    <li>
+      <h3>“mt7620 is being deprecated” — no</h3>
+      <p>Still in <code>SUBTARGETS</code>, snapshots building 2026-08-30, with active 2026 development (PR #24557 upstream MediaTek Ethernet, #24515 PPE hardware flow offload). <code>mipsel_24kc</code> intact. No RAM or flash policy excludes a 128/128 device.</p>
+    </li>
+  </ol>
+</section>
+
+<!-- ============ 8 ============ -->
+<section id="s8">
+  <h2><span class="num">08</span> Recovery reality</h2>
+  <p class="sub">Why this was parked, in one table.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>Path</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Web recovery UI (pb-boot)</td><td>possible, but requires overwriting mtd0 — the risky act itself</td></tr>
+      <tr><td>Breed</td><td>no R3 build exists</td></tr>
+      <tr><td>USB recovery (<code>miwifi.bin</code>)</td><td><strong>gone</strong> — destroyed by X-Wrt's layout</td></tr>
+      <tr><td>Boot-flag fallback to slot 0</td><td><strong>dead</strong> — mtd7 holds a 2016 kernel with no rootfs</td></tr>
+      <tr><td><code>sysupgrade</code> back to X-Wrt</td><td>works only if the flashed image boots</td></tr>
+      <tr><td><strong>TTL serial + U-Boot TFTP</strong></td><td><strong>the only real backstop.</strong> Not owned.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>If resuming, buy the adapter first</h3>
+  <p>Any CH340, CP2102 or FT232 USB-TTL adapter, <strong>3.3 V</strong>. Wiring is <strong>RX→TX, TX→RX, GND→GND, and leave VCC disconnected</strong> — the board is self-powered, and connecting VCC is a common way to kill the serial chip or the router. 115200 8N1, with a five-second window from <code>bootdelay=5</code>.</p>
+
+  <p>Serial also unlocks the correct test method: U-Boot's <em>“Load system code to SDRAM via TFTP”</em> boots an initramfs image entirely in RAM, so NAND enumeration and both radios can be verified without writing a single byte to flash.</p>
+
+  <p>One constraint — the kernel slot is 4 MiB and ramips initramfs images run around 6 MB, so initramfs testing <em>must</em> go over TFTP-to-RAM. It cannot be parked in <code>kernel_stock</code> as a fallback.</p>
+
+  <div class="note">
+    <span class="lbl">Untested free idea — never got run</span>
+    <p>The environment has <code>bootcmd=tftp</code> with <code>ipaddr=192.168.1.1</code> and <code>serverip=192.168.1.3</code>. The router boots fine, so U-Boot either ignores <code>bootcmd</code> or tries TFTP, fails, and falls through to flash. <strong>If it's the latter, a serial-free recovery path already exists.</strong></p>
+    <p>Test it passively: set the PC NIC to static 192.168.1.3/24, run tftpd64 with logging on, reboot the router and watch for an ARP or TFTP read request in the first ten seconds. If it asks for a file, note the exact filename — that would change the whole plan.</p>
+  </div>
+</section>
+
+<!-- ============ 9 ============ -->
+<section id="s9">
+  <h2><span class="num">09</span> pb-boot</h2>
+  <p class="sub">Verified genuine and R3-specific. Deferred, not rejected.</p>
+
+  <p>Local copy at <code>D:\xiaomi mir3\pbboot r3\pb-boot-xiaomi3-20181021-fd6329c.img</code>:</p>
+<pre><code>size    138,852 B          (fits the 256 KiB Bootloader partition)
+sha256  c2235164b2dd676d9564defca9c8eefa3b447ac7f1b2966f0e1bef1145b7442a
+md5     87c79881406cafa47853c734c76e1141
+uImage  magic OK · data CRC OK · load/entry 0x80200000 · name "NAND Fla"</code></pre>
+
+  <p>Payload strings confirm it is the real thing and built for this exact device: <code>PandoraBox-Boot Version 2.1</code>, <code>Xiaomi R3</code>, <code>MT7620:CPU clock set to %dMhz</code>, <code>ranand_erase_write</code>, <code>HTTPD Recovery Module v3.0</code>, <code>uHttpd/1.0 PandoraBox Recovery.</code> — with a full embedded HTML recovery UI (<code>/upload.cgi</code>, <code>/config.cgi</code>, <code>/reboot.cgi</code>, progress bar, English and Chinese). Web recovery is reportedly at <strong>192.168.15.1</strong>.</p>
+
+  <div class="note good">
+    <span class="lbl">Settled — write it verbatim</span>
+    <p><strong>Do not strip the 64-byte uImage header.</strong> The stock bootloader on this unit is <em>also</em> uImage-wrapped with an identical header structure: same magic, same load/entry <code>0x80200000</code>, same <code>05 05 01 00</code>, same <code>"NAND Fla"</code> name. Both payloads are valid little-endian MIPS reset vectors. Confirmed by direct byte comparison.</p>
+  </div>
+
+  <div class="note warn">
+    <span class="lbl">Settled — it can't be written from X-Wrt</span>
+    <p><code>mtd0</code> flags are <code>0x0</code>, i.e. read-only. The options are (a) U-Boot's own “Load Boot Loader code then write to Flash via TFTP” over serial — the correct, Linux-free route — or (b) a custom build with <code>read-only;</code> removed from <code>partition@0</code>.</p>
+  </div>
+
+  <p><a href="https://github.com/coolsnowwolf/lede/issues/8402">coolsnowwolf/lede#8402</a> and <a href="https://github.com/coolsnowwolf/lede/issues/8405">#8405</a> are R3 users hitting infinite reboot with a yellow LED after flashing self-compiled pb-boot-format <em>firmware</em>. Worth noting those are firmware images flashed <em>through</em> pb-boot rather than bootloader bricks — arguably the system working as designed.</p>
+
+  <h3>The tutorial's procedure targets stock firmware, not X-Wrt</h3>
+  <p><code>D:\xiaomi mir3\ssh r3.txt</code> holds the Xiaomi STOK exploit chain plus:</p>
+<pre><code>nvram set uart_en=1 / flag_last_success=1 / boot_wait=on ; nvram commit
+mtd write /tmp/pbboot.img Bootloader</code></pre>
+  <p><code>nvram</code> is stock-firmware-only — X-Wrt has <code>fw_setenv</code> instead — and the <code>mtd write</code> fails on X-Wrt. The tutorial's flow is <strong>stock → SSH exploit → pb-boot</strong>. Source video (Vietnamese): <a href="https://www.youtube.com/watch?v=uazFVgpjRnk">youtube.com/watch?v=uazFVgpjRnk</a>.</p>
+</section>
+
+<!-- ============ 10 ============ -->
+<section id="s10">
+  <h2><span class="num">10</span> Ranked approaches</h2>
+  <p class="sub">Proper to hackiest.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>Approach</th><th>Effort</th><th>Verdict</th></tr></thead>
+    <tbody>
+      <tr><td class="num-col">1</td><td>Mainline-quality MT7620 NFC driver + <code>mt7620-nand</code> subtarget → OpenWrt</td><td class="num-col">months</td><td>from-scratch driver; refused twice; only worth it for its own sake</td></tr>
+      <tr><td class="num-col">2</td><td>Same quality bar, ImmortalWrt only</td><td class="num-col">days–weeks</td><td>plausible — they already ship the patch on 18.06-k5.4. Zero ImmortalWrt issues or PRs mention miwifi-r3; open an issue first</td></tr>
+      <tr><td class="num-col">3</td><td><strong>Fork ImmortalWrt master (6.18), cherry-pick the two commits</strong></td><td class="num-col">an afternoon</td><td><strong>the recommended route</strong></td></tr>
+      <tr><td class="num-col">4</td><td>Same against <code>openwrt-25.12</code> (6.12)</td><td class="num-col">+a day</td><td>unproven; do it after #3 so failures isolate to the backport</td></tr>
+      <tr><td class="num-col">5</td><td>#3/#4 as a rebasable patch series + CI</td><td class="num-col">+a day</td><td>survives 26.x; staging ground for #2</td></tr>
+      <tr><td class="num-col">6</td><td>Stay on X-Wrt, add ImmortalWrt feeds</td><td class="num-col">minutes</td><td><strong>what we're doing</strong></td></tr>
+      <tr><td class="num-col">7</td><td>Backport 25.12 packages onto 18.06-k5.4 via SDK</td><td class="num-col">per-package</td><td>leaf packages only</td></tr>
+      <tr><td class="num-col">8</td><td>Kernel in NAND, rootfs on USB</td><td class="num-col">high</td><td>worse than #3 — see below</td></tr>
+      <tr><td class="num-col">9</td><td>25.12 userspace on the old base</td><td class="num-col">—</td><td><strong>impossible</strong> — see below</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Why #8 fails</h3>
+  <p>Two premises hold up: the bootloader reads NAND with its own driver, and a RAM-loaded kernel needs no MTD to start. The WiFi-EEPROM objection is even solvable — <code>rt2x00</code> accepts <code>ralink,eeprom-data</code> (a raw blob in the DTB, checked <em>before</em> MTD) and mt76's <code>mt76_get_of_eeprom_data()</code> checks <code>mediatek,eeprom-data</code> before <code>mtd-eeprom</code>, with efuse fallback.</p>
+  <p>It fails on everything else. Extroot never runs under initramfs — <code>80_mount_root</code> skips <code>do_mount_root</code> when <code>INITRAMFS=1</code>, so config is tmpfs and wiped every boot. <code>root=/dev/sda2</code> needs a custom kernel config because SCSI, USB-storage and ext4 are kmods living in the rootfs you're trying to mount. And <code>default_do_upgrade()</code> writes through <code>mtd</code> to a named partition, so no MTD driver means no sysupgrade, permanently.</p>
+
+  <h3>Why #9 is impossible</h3>
+  <p>Six independent layers, the first one fatal: the 25.12 feeds contain only <code>packages.adb</code> and <code>*.apk</code>. Those files begin <code>41 44 42 64</code> — ASCII <strong>“ADBd”</strong>, the apk-tools v3 container. Not <code>!&lt;arch&gt;</code> (ipk), not gzip. opkg cannot read them, and bootstrapping apk means installing an <code>.apk</code>, which is itself ADB. The cutover is exactly at 25.12; 24.10 is still opkg.</p>
+  <p>Behind that: musl 1.1.24 versus 1.2.5 time64 symbol renames, kmod vermagic pinning, ucode-coupled netifd (21.02 has no ucode at all), ucode-only LuCI, and singleton daemons — <code>ubusd</code>, and <code>procd</code> as PID 1 — that would have to be hot-swapped.</p>
+</section>
+
+<!-- ============ 11 ============ -->
+<section id="s11">
+  <h2><span class="num">11</span> Open questions</h2>
+  <p class="sub">Explicitly not verified. Don't assume any of these either way.</p>
+
+  <ul>
+    <li>Whether the passive <code>bootcmd=tftp</code> test shows U-Boot calling out to 192.168.1.3.</li>
+    <li>Whether <strong>anyone</strong> has booted an R3 on kernel 6.18 and posted a log. Adversarial research found none — the most recent first-hand confirmation located was 2025-11-19 (x-wrt issue #409, user Bob-YsPan, on an older build). <strong>This unit running 6.18.44 is itself the newest evidence that exists</strong>, which is worth mentioning if a PR is ever opened.</li>
+    <li>Whether the driver actually <em>builds</em> at 6.12 — inferred from its version guards, never compiled.</li>
+    <li>Whether current OpenWrt maintainers would still refuse in 2026; Golle's position is from 2022.</li>
+    <li>Whether the R3's NAND is BMT-formatted and would need <code>mtk_bmt</code> wired in for a proper driver. X-Wrt's driver rolls its own simple BBT and works, which is mildly encouraging.</li>
+    <li>Whether Ralink U-Boot 1.1.3 passes <code>bootargs</code> to the kernel, and whether the kernel would prefer it over the DTS <code>chosen/bootargs</code>. If yes, <code>mtdparts=ra_nfc:…</code> would unlock mtd0 with no rebuild, since the driver lists <code>cmdlinepart</code> before <code>ofpart</code>. Never tested; the environment currently has no <code>bootargs</code> at all.</li>
+    <li>Whether stock Ralink U-Boot will load a uImage larger than the 4 MiB kernel slot.</li>
+  </ul>
+</section>
+
+<!-- ============ 12 ============ -->
+<section id="s12">
+  <h2><span class="num">12</span> Reference</h2>
+
+  <h3>Local files</h3>
+<pre><code>D:\r3-backup\                    full verified NAND backup (section 03)
+D:\xiaomi mir3\
+  pbboot r3\pb-boot-xiaomi3-20181021-fd6329c.img
+  Rom dev\miwifi_r3_all_55ac7_2.11.20.bin       stock firmware — USB recovery / STOK exploit
+  Rom padavan,xwrt,openwrt,rooter\              padavan .trx, openwrt sysupgrade, openwrt pb-boot.bin
+  ssh r3.txt                                    STOK exploit chain + nvram/mtd commands</code></pre>
+
+  <h3>Upstream</h3>
+  <ul>
+    <li>X-Wrt source — <a href="https://github.com/x-wrt/x-wrt">github.com/x-wrt/x-wrt</a> (<code>master</code>, ramips 6.18)</li>
+    <li>X-Wrt images — <a href="https://downloads.x-wrt.com/rom/">downloads.x-wrt.com/rom/</a></li>
+    <li>ImmortalWrt — <a href="https://github.com/immortalwrt/immortalwrt">github.com/immortalwrt/immortalwrt</a> (<code>master</code> 6.18, <code>openwrt-25.12</code> 6.12, <code>openwrt-18.06-k5.4</code> 5.4)</li>
+    <li>ImmortalWrt downloads — <a href="https://downloads.immortalwrt.org/releases/">downloads.immortalwrt.org/releases/</a></li>
+    <li>OpenWrt ToH — <a href="https://openwrt.org/toh/xiaomi/mir3">openwrt.org/toh/xiaomi/mir3</a></li>
+    <li>Breed — <a href="https://breed.hackpascal.net/">breed.hackpascal.net</a> (no R3 build)</li>
+  </ul>
+
+  <h3>Community R3 efforts</h3>
+  <p><code>ptpt52/lede-source</code> · <code>JustNoLimit/Xiaomi-MiWifi-R3-OpenWrt-Stable</code> · <code>XFY9326/Xiaomi-R3-OpenWrt-Stable</code> · <code>astolfogit/miwifi-r3-production</code> · SourceForge <code>mir3-openwrt</code> (kernel 5.10 builds) · OpenWrt forum thread 140403.</p>
+</section>
+
+<footer>
+  <p>Compiled 2026-08-30. Every technical claim above was verified against primary sources — git history, raw file fetches, and on-device inspection — rather than blog summaries. Where something was not verified, section 11 says so explicitly.</p>
+</footer>
+
+</main>
+</div>
+</div>

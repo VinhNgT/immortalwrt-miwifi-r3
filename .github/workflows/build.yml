@@ -1,0 +1,68 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "ImmortalWrt ref to build"
+        default: "master"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune -af
+          df -h /
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
+            gettext git libncurses-dev libssl-dev python3-setuptools rsync swig \
+            unzip zlib1g-dev file wget libelf-dev zstd
+
+      - name: Checkout ImmortalWrt
+        run: |
+          git clone --depth=1 -b "${{ github.event.inputs.ref || 'master' }}" \
+            https://github.com/immortalwrt/immortalwrt.git
+
+      - name: Apply patch series
+        run: |
+          cd immortalwrt
+          git config user.name ci
+          git config user.email ci@local
+          git am --3way ../patches/*.patch
+
+      - name: Configure
+        run: |
+          cd immortalwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          cp ../config.seed .config
+          make defconfig
+          grep -q "CONFIG_TARGET_ramips_mt7620_DEVICE_xiaomi_miwifi-r3=y" .config
+
+      - name: Download sources
+        run: cd immortalwrt && make -j"$(nproc)" download
+
+      - name: Build
+        run: cd immortalwrt && make -j"$(nproc)" world || make -j1 V=s world
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p out
+          cp immortalwrt/bin/targets/ramips/mt7620/*miwifi-r3* out/
+          cp immortalwrt/bin/targets/ramips/mt7620/sha256sums out/ || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: immortalwrt-xiaomi-miwifi-r3
+          path: out/

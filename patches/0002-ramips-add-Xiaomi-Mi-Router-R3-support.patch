@@ -1,0 +1,332 @@
+From 3fd1250fc39dfb21fb81683d6485470b077879b6 Mon Sep 17 00:00:00 2001
+From: Chen Minqiang <ptpt52@gmail.com>
+Date: Sun, 30 Aug 2026 21:18:29 +0700
+Subject: [PATCH 2/2] ramips: add Xiaomi Mi Router R3 support
+
+Hardware:
+- SoC: MediaTek MT7620A @ 580 MHz
+- RAM: 128 MiB DDR2
+- Flash: 128 MiB parallel NAND (ESMT F59L1G81LA)
+- WiFi 2.4 GHz: MT7620A built-in (rt2800soc)
+- WiFi 5 GHz: MT7612E over PCIe (mt76x2)
+- Ethernet: 3x 100M (2 LAN + 1 WAN, internal switch)
+- USB: 1x USB 2.0
+- UART: 115200 8N1 on the internal header
+
+Flash layout follows stock: Bootloader/Config/Bdata/factory,
+dual kernel slots (kernel_stock at 0x200000, kernel at 0x600000)
+and a 118 MiB UBI at 0xa00000. platform.sh picks the kernel slot
+so the image stays compatible with the stock U-Boot boot-flag
+scheme as well as breed and pb-boot.
+
+Images:
+- sysupgrade.bin: standard nand sysupgrade tar
+- kernel1.bin + rootfs0.bin: split images for bootloader flashing
+- factory.bin: kernel + UBI (pb-boot / breed single-slot layout)
+- breed-factory.bin: kernel twice + UBI (both slots populated)
+
+Ported from x-wrt/x-wrt commit f4fc1766f08a and follow-ups
+(factory/breed-factory images, pb-boot detection) by Chen Minqiang.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+---
+ .../uboot-tools/uboot-envtools/files/ramips   |   1 +
+ .../ramips/dts/mt7620a_xiaomi_miwifi-r3.dts   | 194 ++++++++++++++++++
+ target/linux/ramips/image/mt7620.mk           |  21 ++
+ .../mt7620/base-files/etc/board.d/02_network  |   8 +
+ .../mt7620/base-files/lib/upgrade/platform.sh |   8 +
+ 5 files changed, 232 insertions(+)
+ create mode 100644 target/linux/ramips/dts/mt7620a_xiaomi_miwifi-r3.dts
+
+diff --git a/package/boot/uboot-tools/uboot-envtools/files/ramips b/package/boot/uboot-tools/uboot-envtools/files/ramips
+index cf5fdbb..8775a34 100644
+--- a/package/boot/uboot-tools/uboot-envtools/files/ramips
++++ b/package/boot/uboot-tools/uboot-envtools/files/ramips
+@@ -142,6 +142,7 @@ snr,cpe-w4n-mt)
+ xiaomi,mi-router-3-pro|\
+ xiaomi,mi-router-3g|\
+ xiaomi,mi-router-4|\
++xiaomi,miwifi-r3|\
+ xiaomi,mi-router-ac2100|\
+ xiaomi,redmi-router-ac2100)
+ 	ubootenv_add_uci_config "/dev/mtd1" "0x0" "0x1000" "0x20000"
+diff --git a/target/linux/ramips/dts/mt7620a_xiaomi_miwifi-r3.dts b/target/linux/ramips/dts/mt7620a_xiaomi_miwifi-r3.dts
+new file mode 100644
+index 0000000..a43f243
+--- /dev/null
++++ b/target/linux/ramips/dts/mt7620a_xiaomi_miwifi-r3.dts
+@@ -0,0 +1,194 @@
++/dts-v1/;
++
++#include "mt7620a.dtsi"
++
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/input/input.h>
++
++/ {
++	compatible = "xiaomi,miwifi-r3", "ralink,mt7620a-soc";
++	model = "Xiaomi Mi Router R3";
++
++	aliases {
++		led-status = &led_status_blue;
++	};
++
++	chosen {
++		bootargs = "console=ttyS0,115200";
++	};
++
++	keys {
++		compatible = "gpio-keys";
++
++		reset {
++			label = "reset";
++			gpios = <&gpio1 6 GPIO_ACTIVE_HIGH>;
++			linux,code = <KEY_RESTART>;
++		};
++	};
++
++	leds {
++		compatible = "gpio-leds";
++
++		led_status_blue: blue {
++			label = "blue:status";
++			gpios = <&gpio1 0 GPIO_ACTIVE_LOW>;
++			default-state = "on";
++		};
++
++		yellow {
++			label = "yellow:status";
++			gpios = <&gpio1 2 GPIO_ACTIVE_LOW>;
++		};
++
++		red {
++			label = "red:status";
++			gpios = <&gpio1 5 GPIO_ACTIVE_LOW>;
++		};
++	};
++
++	nand {
++		status = "okay";
++		#address-cells = <1>;
++		#size-cells = <1>;
++		compatible = "mtk,mt7620-nand";
++
++		partitions {
++			compatible = "fixed-partitions";
++			#address-cells = <1>;
++			#size-cells = <1>;
++
++			partition@0 {
++				label = "Bootloader";
++				reg = <0x0 0x40000>;
++				read-only;
++			};
++
++			partition@40000 {
++				label = "Config";
++				reg = <0x40000 0x40000>;
++			};
++
++			partition@80000 {
++				label = "Bdata";
++				reg = <0x80000 0x40000>;
++				read-only;
++			};
++
++			factory: partition@0xc0000 {
++				label = "factory";
++				reg = <0xc0000 0x40000>;
++				read-only;
++
++				nvmem-layout {
++					compatible = "fixed-layout";
++					#address-cells = <1>;
++					#size-cells = <1>;
++
++					eeprom_factory_0: eeprom@0 {
++						reg = <0x0 0x200>;
++					};
++
++					eeprom_factory_8000: eeprom@8000 {
++						reg = <0x8000 0x200>;
++					};
++
++					macaddr_factory_28: macaddr@28 {
++						reg = <0x28 0x6>;
++					};
++				};
++			};
++
++			partition@100000 {
++				label = "crash";
++				reg = <0x100000 0x40000>;
++				read-only;
++			};
++
++			partition@140000 {
++				label = "crash_syslog";
++				reg = <0x140000 0x40000>;
++				read-only;
++			};
++
++			partition@180000 {
++				label = "reserved0";
++				reg = <0x180000 0x80000>;
++				read-only;
++			};
++
++			partition@200000 {
++				label = "kernel_stock";
++				reg = <0x200000 0x400000>;
++			};
++
++			partition@600000 {
++				label = "kernel";
++				reg = <0x600000 0x400000>;
++			};
++
++			/* ubi partition is the result of squashing
++			 * next consequent stock partitions:
++			 * - rootfs0 (rootfs partition for stock kernel0),
++			 * - rootfs1 (rootfs partition for stock failsafe kernel1),
++			 * - overlay (used as ubi overlay in stock fw)
++			 * resulting 117,5MiB space for packages.
++			 */
++			partition@a00000 {
++				label = "ubi";
++				reg = <0xa00000 0x7600000>;
++			};
++		};
++	};
++};
++
++&gpio1 {
++	status = "okay";
++};
++
++&ehci {
++	status = "okay";
++};
++
++&ohci {
++	status = "okay";
++};
++
++&ethernet {
++	pinctrl-names = "default";
++	pinctrl-0 = <&ephy_pins>;
++	nvmem-cells = <&macaddr_factory_28>;
++	nvmem-cell-names = "mac-address";
++	mediatek,portmap = "llllw";
++};
++
++&wmac {
++	pinctrl-names = "default", "pa_gpio";
++	pinctrl-0 = <&pa_pins>;
++	pinctrl-1 = <&pa_gpio_pins>;
++	nvmem-cells = <&eeprom_factory_0>;
++	nvmem-cell-names = "eeprom";
++};
++
++&pcie {
++	status = "okay";
++};
++
++&pcie0 {
++	wifi@0,0 {
++		compatible = "pci14c3,7662";
++		reg = <0x0000 0 0 0 0>;
++		nvmem-cells = <&eeprom_factory_8000>;
++		nvmem-cell-names = "eeprom";
++		ieee80211-freq-limit = <5000000 6000000>;
++	};
++};
++
++&pinctrl {
++	state_default: pinctrl0 {
++		gpio {
++			groups = "rgmii1";
++			function = "gpio";
++		};
++	};
++};
+diff --git a/target/linux/ramips/image/mt7620.mk b/target/linux/ramips/image/mt7620.mk
+index c6399af..5993d7d 100644
+--- a/target/linux/ramips/image/mt7620.mk
++++ b/target/linux/ramips/image/mt7620.mk
+@@ -1467,6 +1467,27 @@ define Device/xiaomi_miwifi-mini
+ endef
+ TARGET_DEVICES += xiaomi_miwifi-mini
+ 
++define Device/xiaomi_miwifi-r3
++  SOC := mt7620a
++  BLOCKSIZE := 128k
++  PAGESIZE := 2048
++  KERNEL_SIZE := 4096k
++  IMAGE_SIZE := 32768k
++  UBINIZE_OPTS := -E 5
++  IMAGES += kernel1.bin rootfs0.bin breed-factory.bin factory.bin
++  IMAGE/kernel1.bin := append-kernel | check-size $$$$(KERNEL_SIZE)
++  IMAGE/rootfs0.bin := append-ubi | check-size
++  IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
++  IMAGE/factory.bin := append-kernel | pad-to $$(KERNEL_SIZE) | append-ubi | check-size
++  IMAGE/breed-factory.bin := append-kernel | pad-to $$(KERNEL_SIZE) | \
++			     append-kernel | pad-to $$(KERNEL_SIZE) | \
++			     append-ubi | check-size
++  DEVICE_VENDOR := Xiaomi
++  DEVICE_MODEL := Mi Router R3
++  DEVICE_PACKAGES := kmod-mt76x2 kmod-usb2 kmod-usb-ohci uboot-envtools
++endef
++TARGET_DEVICES += xiaomi_miwifi-r3
++
+ define Device/youku_x2
+   SOC := mt7620a
+   IMAGE_SIZE := 16064k
+diff --git a/target/linux/ramips/mt7620/base-files/etc/board.d/02_network b/target/linux/ramips/mt7620/base-files/etc/board.d/02_network
+index 5e18149..ec10d9d 100644
+--- a/target/linux/ramips/mt7620/base-files/etc/board.d/02_network
++++ b/target/linux/ramips/mt7620/base-files/etc/board.d/02_network
+@@ -282,6 +282,10 @@ ramips_setup_interfaces()
+ 		ucidef_add_switch "switch0" \
+ 			"0:lan" "1:lan" "4:wan" "6@eth0"
+ 		;;
++	xiaomi,miwifi-r3)
++		ucidef_add_switch "switch0" \
++			"1:lan" "4:lan" "0:wan" "6@eth0"
++		;;
+ 	zbtlink,zbt-we1026-5g-16m)
+ 		ucidef_add_switch "switch0" \
+ 			"0:lan" "6t@eth0"
+@@ -445,6 +449,10 @@ ramips_setup_macs()
+ 		wan_mac=$(mtd_get_mac_binary factory 0x2e)
+ 		label_mac=$(mtd_get_mac_binary factory 0x8004)
+ 		;;
++	xiaomi,miwifi-r3)
++		wan_mac=$(mtd_get_mac_binary factory 0x28)
++		lan_mac=$(macaddr_setbit_la "$wan_mac")
++		;;
+ 	zyxel,keenetic-lite-iii-a)
+ 		lan_mac=$(mtd_get_mac_binary RF-EEPROM 0x4)
+ 		wan_mac=$(mtd_get_mac_binary RF-EEPROM 0x28)
+diff --git a/target/linux/ramips/mt7620/base-files/lib/upgrade/platform.sh b/target/linux/ramips/mt7620/base-files/lib/upgrade/platform.sh
+index 6dd7fc7..17750b6 100755
+--- a/target/linux/ramips/mt7620/base-files/lib/upgrade/platform.sh
++++ b/target/linux/ramips/mt7620/base-files/lib/upgrade/platform.sh
+@@ -38,6 +38,14 @@ platform_do_upgrade() {
+ 				of=/dev/mtdblock$idx
+ 		default_do_upgrade "$1"
+ 		;;
++	xiaomi,miwifi-r3)
++		# this make it compatible with breed
++		dd if=/dev/mtd0 bs=64 count=1 2>/dev/null | grep -qi breed && CI_KERNPART_EXT="kernel_stock"
++		dd if=/dev/mtd7 bs=64 count=1 2>/dev/null | grep -o MIPS.*Linux | grep -qi X-WRT && CI_KERNPART_EXT="kernel_stock"
++		dd if=/dev/mtd7 bs=64 count=1 2>/dev/null | grep -o MIPS.*Linux | grep -qi NATCAP && CI_KERNPART_EXT="kernel0_rsvd"
++		dd if=/dev/mtd0 2>/dev/null | grep -qi pb-boot && CI_KERNPART_EXT="kernel_stock"
++		nand_do_upgrade "$1"
++		;;
+ 	*)
+ 		default_do_upgrade "$1"
+ 		;;
+-- 
+2.55.0.windows.5
+
