@@ -1,0 +1,78 @@
+From aa462df1cd6228ed4ec7d887de32ce168efe6df3 Mon Sep 17 00:00:00 2001
+From: Chen Minqiang <ptpt52@gmail.com>
+Date: Mon, 31 Aug 2026 00:52:53 +0700
+Subject: [PATCH] base-files: nand: support writing the kernel to a second
+ partition
+
+Add CI_KERNPART_EXT: when a platform sets it, nand upgrade writes
+(and pre-invalidates) the kernel image to that partition in addition
+to CI_KERNPART. Guarded everywhere by test -n, so behavior is
+unchanged for every device that does not set it.
+
+Used by xiaomi_miwifi-r3: its platform.sh sets
+CI_KERNPART_EXT="kernel_stock" when the breed or pb-boot bootloader
+is detected on mtd0, because those bootloaders always boot the first
+kernel slot (0x200000) while the stock Ralink U-Boot boots the
+second (0x600000). Without this, sysupgrade under breed/pb-boot
+would leave the booted slot stale.
+
+Adapted from x-wrt package/base-files nand.sh (author Chen Minqiang).
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+---
+ package/base-files/files/lib/upgrade/nand.sh | 13 ++++++++++++-
+ 1 file changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/package/base-files/files/lib/upgrade/nand.sh b/package/base-files/files/lib/upgrade/nand.sh
+index 4bf9fc9..de3a93c 100644
+--- a/package/base-files/files/lib/upgrade/nand.sh
++++ b/package/base-files/files/lib/upgrade/nand.sh
+@@ -5,6 +5,7 @@
+ 
+ # 'kernel' partition or UBI volume on NAND contains the kernel
+ CI_KERNPART="${CI_KERNPART:-kernel}"
++CI_KERNPART_EXT="${CI_KERNPART_EXT}"
+ 
+ # 'ubi' partition on NAND contains UBI
+ # If individual UBI volumes are on different partitions,
+@@ -317,9 +318,10 @@ nand_upgrade_tar() {
+ 	local board_dir="$($cmd < "$tar_file" | tar tf - | grep -m 1 '^sysupgrade-.*/$')"
+ 	board_dir="${board_dir%/}"
+ 
+-	local kernel_mtd kernel_length
++	local kernel_mtd kernel_mtd_ext kernel_length
+ 	if [ "$CI_KERNPART" != "none" ]; then
+ 		kernel_mtd="$(find_mtd_index "$CI_KERNPART")"
++		test -n "$CI_KERNPART_EXT" && kernel_mtd_ext="$(find_mtd_index "$CI_KERNPART_EXT")"
+ 		kernel_length=$( ($cmd < "$tar_file" | tar xOf - "$board_dir/kernel" | wc -c) 2> /dev/null)
+ 		[ "$kernel_length" = 0 ] && kernel_length=
+ 	fi
+@@ -340,6 +342,9 @@ nand_upgrade_tar() {
+ 			# Hence only invalidate kernel for now.
+ 			dd if=/dev/zero bs=4096 count=1 2> /dev/null | \
+ 				mtd write - "$CI_KERNPART"
++			test -n "$CI_KERNPART_EXT" && \
++			dd if=/dev/zero bs=4096 count=1 2> /dev/null | \
++				mtd write - "$CI_KERNPART_EXT"
+ 		else
+ 			ubi_kernel_length="$kernel_length"
+ 		fi
+@@ -360,9 +365,15 @@ nand_upgrade_tar() {
+ 				flash_erase -j "/dev/mtd${kernel_mtd}" 0 0
+ 				$cmd < "$tar_file" | tar xOf - "$board_dir/kernel" | \
+ 					nandwrite "/dev/mtd${kernel_mtd}" -
++				test -n "$CI_KERNPART_EXT" && \
++				$cmd < "$tar_file" | tar xOf - "$board_dir/kernel" | \
++					nandwrite "/dev/mtd${kernel_mtd_ext}" -
+ 			else
+ 				$cmd < "$tar_file" | tar xOf - "$board_dir/kernel" | \
+ 					mtd write - "$CI_KERNPART"
++				test -n "$CI_KERNPART_EXT" && \
++				$cmd < "$tar_file" | tar xOf - "$board_dir/kernel" | \
++					mtd write - "$CI_KERNPART_EXT"
+ 			fi
+ 		else
+ 			local ubidev="$( nand_find_ubi "${CI_KERN_UBIPART:-$CI_UBIPART}" )"
+-- 
+2.55.0.windows.5
+

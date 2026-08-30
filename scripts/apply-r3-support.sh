@@ -192,6 +192,19 @@ else
 	say "uboot-envtools/files/ramips" "miwifi-r3 entry inserted"
 fi
 
+# ------------------------------- 10. nand.sh dual-slot kernel (CI_KERNPART_EXT)
+NS="$TREE/package/base-files/files/lib/upgrade/nand.sh"
+if grep -q 'CI_KERNPART_EXT' "$NS" 2>/dev/null; then
+	say "base-files/.../nand.sh" "already present, skipped"
+else
+	if patch -d "$TREE" -p1 -N -s < "$HERE"/patches/0003-*.patch; then
+		say "base-files/.../nand.sh" "CI_KERNPART_EXT support applied"
+	else
+		echo "ERROR: nand.sh patch failed - apply patches/0003 by hand" >&2
+		exit 1
+	fi
+fi
+
 echo
 echo "Done. Next:"
 echo "  cd $TREE"

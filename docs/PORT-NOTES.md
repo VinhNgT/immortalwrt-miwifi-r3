@@ -105,10 +105,17 @@ Ten touch points, all derived from x-wrt commits `387988e8c956`
    (`1:lan 4:lan 0:wan 6@eth0`) + MACs from factory `0x28`
 10. `package/boot/uboot-tools/uboot-envtools/files/ramips` — fw_printenv
     config (mtd1, 0x0/0x1000/0x20000)
+11. `package/base-files/files/lib/upgrade/nand.sh` — `CI_KERNPART_EXT`
+    support (`patches/0003`): platform.sh's breed/pb-boot detection
+    sets this so sysupgrade writes the kernel to **both** slots; the
+    variable is an x-wrt extension that stock ImmortalWrt ignores, so
+    without this patch the detection lines are decorative and
+    sysupgrade under breed/pb-boot would leave the booted slot stale.
 
-(The original research counted eight; 9 and 10 surfaced when lifting the
-actual device commit — the first scaffold's apply script missed both,
-which would have produced wrong network config and no fw_printenv.)
+(The original research counted eight; 9 and 10 surfaced when lifting
+the actual device commit — the first scaffold's apply script missed
+both, which would have produced wrong network config and no
+fw_printenv. 11 surfaced during the pb-boot safety research.)
 
 `mt76x8/config-<kv>` additionally needs
 `# CONFIG_MTD_NAND_MT7620 is not set` — mt76x8 is also `SOC_MT7620`,
@@ -168,6 +175,18 @@ Read before re-researching anything.
 - **A dormant second kernel slot is not a fallback.** mtd7 holds a
   CRC-valid stock 2.6.36 kernel whose rootfs no longer exists — it
   boots to a panic. Both slots share one UBI.
+- **"pb-boot recovery is at 192.168.15.1" — wrong, it's 192.168.1.1.**
+  Confirmed three ways: the binary's compiled-in env, and two
+  independent tutorials. pb-boot also ignores Xiaomi's A/B boot flags
+  entirely (no flag strings in the binary) — it always boots
+  `kernel_stock` @ 0x200000, which is why x-wrt's sysupgrade mirrors
+  the kernel there when it detects pb-boot/breed on mtd0.
+- **"pb-boot can be verified against an official hash" — no longer
+  possible.** `downloads.pangubox.com` is dead, the Wayback Machine
+  never captured the file, no forum or repo ever published its hash,
+  and GitHub code search finds nothing. The strongest available
+  verification is internal (self-CRC + cold-boot entry code + the
+  community record). See RECOVERY.md appendix for the full verdict.
 
 ## Questions that were open, now answered
 

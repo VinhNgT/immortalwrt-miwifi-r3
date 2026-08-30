@@ -159,28 +159,65 @@ Subsequent updates: ImmortalWrt's own sysupgrade with the newer
   from `downloads.x-wrt.com/rom/`.
 - From a broken system: recovery ladder step 2 or 3 above.
 
-## Appendix: pb-boot — verified, shelved
+## Appendix: pb-boot — researched 2026-08-31, optional install
 
 `D:\xiaomi mir3\pbboot r3\pb-boot-xiaomi3-20181021-fd6329c.img` —
-138,852 B, sha256
+138,852 B, md5 `87c79881406cafa47853c734c76e1141`, sha256
 `c2235164b2dd676d9564defca9c8eefa3b447ac7f1b2966f0e1bef1145b7442a`,
-md5 `87c79881406cafa47853c734c76e1141`. uImage header + data CRC
-verified; strings confirm PandoraBox-Boot 2.1 for "Xiaomi R3" with
-HTTPD Recovery Module v3.0 (`/upload.cgi`, web recovery reportedly at
-`192.168.15.1`). Both stock U-Boot and pb-boot are uImage-wrapped
-identically (load/entry `0x80200000`, name "NAND Fla") ⇒ if ever
-flashed, the `.img` goes on verbatim — header included.
+sha1 `a739d0f6607063543f208d734f4c6d5759d9b636`.
 
-**Why shelved (2026-08-30):** the only non-destructive test available —
-warm-chaining it from the running U-Boot (`tftpboot` + `bootm`,
-transfer and CRC OK, jump taken) — died silently: no console, no HTTP,
-no DHCP. Bootloaders expect cold-reset CPU state, so this outcome says
-nothing about the image; but with no way to validate before the
-irreversible mtd0 write, and with serial + initramfs covering every
-recovery need, the write is not justified. Revisit only if (a) the
-binary is byte-verified against an official PandoraBox release, and
-(b) serial-free recovery becomes genuinely necessary.
+**Provenance:** this exact filename is the community-standard R3
+bootloader — independently referenced by awaimai.com/2852, the
+cloud.tencent 1454352 tutorial, and the Vietnamese video tutorial the
+local copy came from (kamrul.dev uses the older `20180726-0d8505f`; a
+newer `20190317-61b6d33` also existed). Official source
+`downloads.pangubox.com/pb-boot/` is dead, was never archived, and
+nobody ever published hashes ⇒ **byte-verification against an official
+copy is impossible, permanently.** No R3 bootloader-brick reports were
+found anywhere; the "yellow LED loop" reports in the wild are
+self-built *firmware* missing the NAND driver — recovered through
+pb-boot itself, i.e. the system working as designed.
 
-The old "path B" (custom build with `read-only;` dropped from
-`partition@0`, then `mtd write … Bootloader` from Linux) remains
-technically possible and equally unjustified.
+**Forensics:** internal uImage header + data CRCs valid (accidental
+corruption excluded — the file is self-verifying). Entry code is
+proper cold-boot MIPS (zeroes the entire register file before touching
+anything) — which also confirms the warm-chain dry-run failure was
+environmental, not evidence against the image. Ralink NAND driver
+(`ranand_*`) and a full HTTPD recovery are embedded. Compiled-in env:
+`bootdelay=1`, `ipaddr=192.168.1.1`, `serverip=192.168.1.100`.
+
+**Behavior (settled):**
+- It contains none of Xiaomi's boot-flag strings — it always boots
+  slot 0, `kernel_stock` @ 0x200000. It does NOT boot mtd8.
+- Recovery: hold reset while powering on, release after 2–3 s → slow
+  yellow LED → upload page at **`http://192.168.1.1`** (LAN cable
+  only). Earlier notes saying 192.168.15.1 were wrong.
+- Recovery upload format = two kernels + UBI — exactly our
+  `breed-factory.bin` (confirmed against the tutorial's own
+  `…-pb-boot.bin`: uImage @ 0, uImage @ 0x400000, UBI @ 0x800000).
+- Flash the `.img` verbatim, uImage header included (stock mtd0 is
+  wrapped identically: load/entry `0x80200000`, name "NAND Fla").
+
+**If installing — the safe sequence** (each step gated on the last):
+
+1. Only from a running ImmortalWrt built **with `patches/0003`**
+   (CI_KERNPART_EXT) — without it, every sysupgrade under pb-boot
+   leaves the booted slot stale.
+2. Pre-stage slot 0 so pb-boot has something to boot:
+   `mtd write kernel1.bin kernel_stock`, then verify:
+   `md5sum /dev/mtd7` vs the padded image (or re-read matches).
+3. Serial attached, stable power: U-Boot menu option `9`, send the
+   pb-boot `.img`. **Do not power off during the write.**
+4. Reboot → pb-boot boots mtd7 → same UBI rootfs as before.
+5. Test recovery: hold-reset power-on → `192.168.1.1` — look, upload
+   nothing. Serial-free recovery achieved.
+6. Thereafter: recovery = upload `breed-factory.bin`; sysupgrades keep
+   both slots current (platform.sh detects pb-boot → 0003 writes both).
+
+**Residual risk, stated honestly:** the mtd0 write is the one
+irreversible act on this router; a corrupted write (power loss) or a
+tampered image (unfalsifiable, since no official hash survives) means
+a brick with no recovery short of NAND desoldering. The evidence for
+this file is strong but circumstantial. Serial + initramfs already
+cover every recovery need — install pb-boot for convenience only, with
+that trade understood.
