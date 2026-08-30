@@ -1,195 +1,186 @@
-# Mi Router 3 — recovery plan and flashing runbook
+# Mi Router 3 — device runbook: recovery, testing, flashing
 
-State of **this** router (SN 12937/20170494), verified 2026-08-30.
-Everything below was established by direct inspection over SSH — not
-assumed from wikis.
+For **this** unit (SN 12937/20170494). Everything here was established
+by direct on-device inspection and live serial sessions (2026-08-30/31),
+not from wikis. Background and research history: [docs/PORT-NOTES.md](docs/PORT-NOTES.md).
 
-## Current state
+## Standing facts
 
-- Running firmware: X-Wrt, kernel 6.18.44, LAN `192.168.15.1`, SSH root.
 - Bootloader (mtd0): **stock Ralink U-Boot 1.1.3 (Apr 15 2016)**,
-  uImage-wrapped. Not breed, not pb-boot.
-- Boot env already ideal for serial work: `uart_en=1`, `boot_wait=on`,
-  `bootdelay=5`, `bootcmd=tftp`, `ipaddr=192.168.1.1`,
-  `serverip=192.168.1.3`.
-- Kernel slots: mtd7 `kernel_stock` = stock 2.6.36 kernel (CRC valid but
-  its rootfs no longer exists — **not** a usable fallback); mtd8
-  `kernel` = X-Wrt 6.18.44 (active, `flag_boot_rootfs=1`).
-- **No recovery paths exist today**: no USB recovery in this bootloader
-  (only `uboot.bin`/`test.bin` TFTP), no web recovery, no working second
-  system. A silent-boot TFTP test confirmed nothing fires on a good boot.
-- mtd0 is **read-only in the running kernel** (`flags 0x0`, DTS
-  `read-only`), so pb-boot cannot be written from X-Wrt as-is.
+  uImage-wrapped. Never modified — and the doctrine below never
+  modifies it.
+- U-Boot env is already ideal: `uart_en=1`, `boot_wait=on`,
+  `bootdelay=5`, `ipaddr=192.168.1.1`, `serverip=192.168.1.3`.
+  `flag_boot_rootfs=1` → boots the `kernel` slot (mtd8).
+- mtd0 is read-only under Linux (DTS `read-only`) — by design, keep it.
+- Kernel slots: mtd7 `kernel_stock` holds the stock 2.6.36 kernel —
+  CRC-valid but its rootfs is gone; **not a fallback**. mtd8 `kernel`
+  is the live slot.
+- The stock bootloader has **no USB and no web recovery**. Serial is
+  the backstop, and it works (CP2102 on COM5, 115200 8N1).
+- NAND: ESMT F59L1G81LA, 0 bad eraseblocks; one single-bit flip in
+  `kernel_stock` (page 0x6b7) that ECC corrects on every read.
 
-## The backup (do not lose this)
+## The backup — do not lose this
 
 `D:\r3-backup\` — full 128 MiB NAND dump, all 10 partitions,
-**md5-verified on the PC**. `r3-backup.tar` md5
-`65530a59773e0761ee32cb0bc24ad03d`.
+md5-verified on the PC. `r3-backup.tar` md5
+`65530a59773e0761ee32cb0bc24ad03d`. Keep a second copy elsewhere.
 
 | mtd | name | size | notes |
 |---|---|---|---|
 | 0 | Bootloader | 256 KiB | stock U-Boot 1.1.3 |
 | 1 | Config | 256 KiB | U-Boot env |
 | 2 | Bdata | 256 KiB | SN, keys |
-| 3 | **factory** | 256 KiB | **RF calibration + MACs — irreplaceable, exists nowhere else on earth** |
-| 4–6 | crash/crash_syslog/reserved0 | | |
-| 7 | kernel_stock | 4 MiB | stock 2.6.36 kernel |
-| 8 | kernel | 4 MiB | X-Wrt 6.18.44 kernel |
-| 9 | ubi | 118 MiB | X-Wrt rootfs + overlay |
+| 3 | **factory** | 256 KiB | **RF calibration + MACs — irreplaceable** |
+| 4–6 | crash / crash_syslog / reserved0 | | |
+| 7 | kernel_stock | 4 MiB | stock 2.6.36 kernel (dead slot) |
+| 8 | kernel | 4 MiB | live kernel slot |
+| 9 | ubi | 118 MiB | rootfs + overlay |
 
-Copy it to a second disk or cloud before flashing anything.
+Reference md5s for read-verification: mtd3
+`4d2c86bc2b77adc1a73b059d6b69ca48`, mtd7
+`c007b8af668f3e023d87f20d27fad7eb`, mtd8
+`043a401a0b09e35870f03427f0a36f70` (full list in `D:\r3-backup\MD5SUMS`).
 
 ## Golden rules
 
-1. Never write mtd0 (Bootloader) except with the verified pb-boot image
-   or the mtd0.bin from the backup. A bad bootloader is the only
-   unrecoverable state without soldering-level work.
-2. **Never install breed** — no R3 (MT7620+NAND) build exists; the
-   mini/3G builds are for different hardware and will hard-brick.
+1. **Never write mtd0.** All install/recovery paths below work without
+   touching it. (pb-boot is shelved — see appendix.)
+2. Never install Breed — no R3 build exists; wrong-device bootloader =
+   unrecoverable brick.
 3. Never let anything erase mtd3 (`factory`).
 4. Serial: 3.3 V TTL, RX→TX, TX→RX, GND→GND, **VCC not connected**.
-5. In the U-Boot menu, the bootloader-write option accepts any file it
-   receives — double-check the TFTP filename before confirming.
+5. In the U-Boot menu, **option 9 writes the bootloader to flash** —
+   never select it casually. There is no RAM-test menu option.
+6. Flash over LAN cable, never WiFi; never power off mid-write.
 
-## The pb-boot image (verified good)
+## Recovery ladder
 
-`D:\xiaomi mir3\pbboot r3\pb-boot-xiaomi3-20181021-fd6329c.img`
-— 138,852 B, uImage header + data CRC verified, load/entry
-`0x80200000`, PandoraBox-Boot 2.1 for "Xiaomi R3", contains
-**HTTPD Recovery Module v3.0** and TFTP recovery.
+Any failure state short of a destroyed bootloader is recoverable:
 
-mtd0 analysis showed both the stock bootloader and pb-boot are
-uImage-wrapped the same way ⇒ **flash the `.img` verbatim, do not strip
-the 64-byte header**.
+1. **Firmware misbehaves but boots** → sysupgrade to a known-good image
+   (ImmortalWrt or X-Wrt).
+2. **Firmware doesn't boot** → serial → U-Boot → RAM-boot an initramfs
+   image (below) → repair from Linux: `mtd write` the relevant
+   partitions from the backup, or run sysupgrade from the RAM system.
+3. **Byte-exact return to the 2026-08-30 X-Wrt state** → RAM-boot any
+   initramfs, copy `mtd8.bin` + `mtd9.bin` over (USB stick or scp),
+   `mtd write mtd8.bin kernel && mtd write mtd9.bin ubi`.
+   (`factory`/`Bdata` only if actually damaged.)
 
-## Serial session outcome (2026-08-30) — pb-boot SHELVED
+## Serial + U-Boot reference (as captured on this unit)
 
-Executed on the real unit: CP2102 on COM5, console proven both ways,
-menu captured, TFTP from the laptop working (after firewall off).
-The pb-boot dry run — `tftpboot 80100000 pbboot.img` + autostart
-`bootm` — transferred and checksum-verified, jumped… and died silently:
-no console output, no keypress response, no web server on
-`192.168.1.1`/`192.168.15.1`, no DHCP. Warm-chaining a bootloader from
-a running U-Boot is inherently unreliable (it expects cold-reset CPU
-state), so this neither proves nor clears the image — and a bootloader
-write on ambiguous evidence is the one unrecoverable mistake available
-in this project.
-
-**Decision: do not write mtd0. Recovery doctrine is serial console +
-stock U-Boot + the verified backup.** With serial, stock U-Boot can
-RAM-boot a full Linux anytime (menu option 1 / `tftpboot`+`bootm`) to
-repair any partition from the backup — pb-boot adds nothing except
-serial-free convenience. Revisit only if the exact binary can be
-byte-verified against an official PandoraBox release.
-
-## Path A (reference — write step shelved): USB-TTL serial + U-Boot does the write
-
-Needs: any $3 CP2102/CH340/FT232 USB-TTL adapter (3.3 V), and a TFTP
-server (tftpd64 on the second laptop, static IP `192.168.1.3`, netmask
-`255.255.255.0`, cable to a LAN port).
-
-1. Open the case; find the 4-pin serial header near the SoC. Connect
-   RX/TX/GND per rule 4. PuTTY/TeraTerm: 115200 8N1, no flow control.
-2. Power on. Boot messages confirm RX wiring; if the router also reacts
-   to keypresses, TX is good. (If no output, swap RX/TX — it's the
-   usual fix and harmless.)
-3. Power-cycle and interrupt U-Boot within the 5 s window. The menu on
-   **this unit** (captured over serial, 2026-08-30) is:
-   - `1` Load system code to SDRAM via TFTP (RAM-boot, nothing written)
-   - `2` Load system code then write to Flash via TFTP
-   - `3` Boot system code via Flash (default)
-   - `4` Enter boot command line interface (`MT7620 #` prompt)
-   - `9` Load Boot Loader code then **write to Flash** via TFTP
-   There is **no RAM-test option for bootloaders** in this menu:
-   option `9` writes mtd0. Do not touch `9` until the dry run below
-   has passed.
-4. Put `pb-boot-xiaomi3-20181021-fd6329c.img` in the tftpd64 root,
-   copied to a short name, e.g. `pbboot.img`.
-5. **Dry run from the CLI** (nothing written): choose `4`, then at
-   `MT7620 #` (command set verified on this unit: `tftpboot`, `bootm`,
-   `go`, `nand`, `setenv`/`saveenv`):
-   ```
-   setenv autostart yes
-   tftpboot 80100000 pbboot.img
-   bootm 80100000
-   ```
-   Expect `Bytes transferred = 138852` from the tftp step. `bootm`
-   parses the uImage header, copies the payload to its load address
-   `0x80200000` and jumps (the pb-boot image is a type-standalone
-   uImage; `autostart yes` makes bootm jump — it is RAM-only unless
-   `saveenv` is run, so never run `saveenv` here). If `bootm` loads
-   but returns to the prompt, `go 80200000` starts it. You should see
-   "PandoraBox-Boot Version 2.1". Look but do not touch: do NOT use
-   any pb-boot menu entry that writes or uploads while running from
-   RAM. Power-cycling discards everything; stock U-Boot is untouched.
-6. Only after the dry run behaves: power-cycle into the menu, choose
-   `9`, and answer the prompts — device IP `192.168.1.1`, server
-   `192.168.1.3`, filename `pbboot.img`. U-Boot receives the file,
-   erases the Bootloader region and writes it. **Do not power off
-   during this step.**
-7. Reboot. pb-boot should bring up X-Wrt exactly as before (it boots
-   the same kernel slot scheme). Recovery from now on: hold **reset**
-   while powering on → pb-boot HTTPD recovery → upload a
-   `factory.bin`-style image (kernel+UBI). That is precisely the format
-   this repo's build produces.
-
-Why A is recommended: U-Boot writes the bootloader itself — the Linux
-`read-only` guard on mtd0 is never involved, and the serial console you
-used is also your safety net for everything that follows.
-
-## Path B (no serial): unlock mtd0 via a custom build
-
-Build X-Wrt (not ImmortalWrt — smaller first-flash risk on a scheme
-X-Wrt has proven on this box) with one DTS change: remove `read-only;`
-from `partition@0` in `mt7620a_xiaomi_miwifi-r3.dts`. Sysupgrade to it,
-then from the running system:
+Wiring per rule 4; MobaXterm/PuTTY 115200 8N1, flow control off.
+Interrupt within 5 s of power-on. The real menu:
 
 ```
-mtd write /tmp/pb-boot-xiaomi3-20181021-fd6329c.img Bootloader
+1: Load system code to SDRAM via TFTP.        (RAM-boot, writes nothing)
+2: Load system code then write to Flash via TFTP.
+3: Boot system code via Flash (default).
+4: Entr boot command line interface.          (MT7620 # prompt)
+9: Load Boot Loader code then write to Flash via TFTP.   ** WRITES mtd0 **
 ```
 
-Verify before rebooting:
+CLI commands available: `tftpboot`, `bootm`, `go`, `nand`, `md`, `mm`,
+`nm`, `printenv`, `setenv`, `saveenv`, `reset`, `version`, `mdio`, `rf`.
+Rule of thumb: `setenv` without `saveenv` is RAM-only and safe.
 
-```
-dd if=/dev/mtd0 bs=64 count=1 | strings | grep -i pb-boot
-md5sum /tmp/pb-boot-*.img; dd if=/dev/mtd0 bs=1 count=138852 | md5sum
-```
+### TFTP server gotchas (Windows laptop, tftpd64)
 
-Risks: you flash a whole firmware to change one DTS flag, and the write
-happens with no fallback bootloader — a power cut mid-write bricks with
-no serial to recover. Only take this path if serial is truly impossible.
+- Laptop static `192.168.1.3/24`, cable into a **LAN** port.
+- The link has no gateway → Windows treats it as **Public/Unidentified**
+  → firewall silently eats TFTP (and ICMP echo). Symptom signature:
+  U-Boot prints `Got ARP REPLY` then `T T T…` timeouts — ARP works,
+  TFTP dies on the laptop. Fix: allow tftpd64 on all profiles, or
+  temporarily `netsh advfirewall set allprofiles state off` (re-enable
+  after).
+- Check tftpd64's "Server interfaces" is bound to the 192.168.1.3
+  adapter and the base directory holds the image.
+- A missing file would come back as an explicit error, not timeouts.
 
-## First ImmortalWrt boot — from RAM, zero flash writes
+## RAM-booting an initramfs image (proven procedure)
 
-The port ships `ramdisk` support, so the build produces an
-**initramfs image** (`…initramfs-kernel.bin`): a complete ImmortalWrt
-that runs entirely from RAM under the stock bootloader.
+Boots a complete firmware entirely from RAM — **zero flash writes**,
+power-cycle returns to the flashed system. This is both the test
+harness and recovery vehicle.
 
-1. Copy the initramfs image to the TFTP root under a short name,
-   e.g. `r3.bin`.
-2. Serial → U-Boot menu → `4`, then:
+1. Put `…initramfs-kernel.bin` in the TFTP root under a short name
+   (`r3.bin`).
+2. Menu → `4`, then:
    ```
    tftpboot 84000000 r3.bin
    bootm 84000000
    ```
-   Load it **high** (`0x84000000`): the kernel decompresses to
-   `0x80000000`, and a multi-MB image loaded at the default
-   `0x80100000` would overlap its own destination.
-3. Test everything while flash stays untouched: NAND driver probes
-   (`dmesg | grep -i nand`), all 10 mtd partitions visible, `ubiattach`
-   works, both radios up, switch ports mapped, sysupgrade metadata.
-   Power-cycling returns to X-Wrt as if nothing happened.
-4. Permanent install, only after the RAM test passes: from running
-   X-Wrt, `sysupgrade -n` with our `sysupgrade.bin` (identical
-   partition scheme and kernel-slot logic by design — mtd0 is never
-   touched). Keep the serial console attached for the first boot.
+   Load **high** (`0x84000000`): the kernel decompresses to
+   `0x80000000`; a multi-MB image at the default `0x80100000` would
+   overlap its own destination. Images well past the 4 MiB flash-slot
+   limit load fine this way (8.9 MB verified).
+3. Root shell appears on serial; LAN comes up as `192.168.1.1`.
+
+**2026-08-31 validation run (ImmortalWrt master, 6.18.44):** all 10
+partitions present with exact stock layout; `mtk_nand_probe` +
+`fixed-partitions` on `ra_nfc`; md5 of mtd3/mtd7/mtd8 byte-identical
+to the backup on two consecutive runs — including a live single-bit
+ECC correction (`1. correct byte 445, bit 1!`) with output still
+matching; both radios (`phy0`+`phy1`, SSID on air); `switch0`
+responding. The port is proven on this hardware.
+
+## Installing ImmortalWrt (permanent)
+
+Use a build whose seed includes LuCI (`CONFIG_PACKAGE_luci=y` —
+present since repo commit `1639e0b`). Get
+`…squashfs-sysupgrade.bin` from the latest green Actions run.
+
+Via the running firmware's web UI (X-Wrt LuCI, `192.168.15.1`):
+
+1. PC on LAN cable; serial console attached and logging (nice to have).
+2. System → Backup / Flash Firmware → flash the `…sysupgrade.bin`.
+3. **Uncheck "Keep settings"** (= `sysupgrade -n`). Old-firmware config
+   must not carry over.
+4. Verify the displayed checksum against the artifact's `sha256sums`,
+   proceed, and leave it alone for 3–5 minutes.
+5. After reboot the address changes: **`192.168.1.1`**, user `root`, no
+   password — set one immediately. WiFi broadcasts as "ImmortalWrt".
+
+CLI equivalent: `scp` the image to `/tmp`, `sysupgrade -n /tmp/….bin`.
+
+Slot behavior (from our `platform.sh`): with stock U-Boot on mtd0 the
+kernel is written to `kernel` (mtd8) — the slot the boot flags already
+point at. If the upgrader ever refuses the image as incompatible, stop
+and investigate; do not force.
+
+Subsequent updates: ImmortalWrt's own sysupgrade with the newer
+`sysupgrade.bin`.
 
 ## Reverting to X-Wrt
 
-- From a running ImmortalWrt: `sysupgrade -n` with the X-Wrt sysupgrade
-  image from `downloads.x-wrt.com/rom/`.
-- From a broken system: serial → RAM-boot the initramfs image (above),
-  then restore from the backup: copy `mtd8.bin`/`mtd9.bin` over and
-  `mtd write` them to `kernel`/`ubi`. (`factory`/`Bdata` only if
-  actually damaged.) An X-Wrt initramfs image works for this too.
+- From a working system: sysupgrade (fresh config) with the X-Wrt image
+  from `downloads.x-wrt.com/rom/`.
+- From a broken system: recovery ladder step 2 or 3 above.
+
+## Appendix: pb-boot — verified, shelved
+
+`D:\xiaomi mir3\pbboot r3\pb-boot-xiaomi3-20181021-fd6329c.img` —
+138,852 B, sha256
+`c2235164b2dd676d9564defca9c8eefa3b447ac7f1b2966f0e1bef1145b7442a`,
+md5 `87c79881406cafa47853c734c76e1141`. uImage header + data CRC
+verified; strings confirm PandoraBox-Boot 2.1 for "Xiaomi R3" with
+HTTPD Recovery Module v3.0 (`/upload.cgi`, web recovery reportedly at
+`192.168.15.1`). Both stock U-Boot and pb-boot are uImage-wrapped
+identically (load/entry `0x80200000`, name "NAND Fla") ⇒ if ever
+flashed, the `.img` goes on verbatim — header included.
+
+**Why shelved (2026-08-30):** the only non-destructive test available —
+warm-chaining it from the running U-Boot (`tftpboot` + `bootm`,
+transfer and CRC OK, jump taken) — died silently: no console, no HTTP,
+no DHCP. Bootloaders expect cold-reset CPU state, so this outcome says
+nothing about the image; but with no way to validate before the
+irreversible mtd0 write, and with serial + initramfs covering every
+recovery need, the write is not justified. Revisit only if (a) the
+binary is byte-verified against an official PandoraBox release, and
+(b) serial-free recovery becomes genuinely necessary.
+
+The old "path B" (custom build with `read-only;` dropped from
+`partition@0`, then `mtd write … Bootloader` from Linux) remains
+technically possible and equally unjustified.

@@ -1,11 +1,26 @@
 # ImmortalWrt for the Xiaomi Mi Router 3 (miwifi-r3)
 
 Out-of-tree port bringing the Xiaomi Mi Router 3 back to current
-ImmortalWrt (master, kernel 6.18). The device was last supported in
-18.06-k5.4; it was dropped because OpenWrt lost the MT7620 raw-NAND
-controller driver at the 4.4 → 4.9 kernel bump and only the MT7621
-driver ever came back. X-Wrt kept an out-of-tree driver alive — this
-repo lifts exactly that work onto ImmortalWrt.
+ImmortalWrt (master, kernel 6.18). The device was dropped when OpenWrt
+lost the MT7620 raw-NAND driver at the 4.4 → 4.9 kernel bump; X-Wrt
+kept an out-of-tree driver alive, and this repo lifts that work onto
+ImmortalWrt. History, driver analysis, and research corrections:
+[docs/PORT-NOTES.md](docs/PORT-NOTES.md).
+
+## Status: proven on hardware
+
+RAM-booted on the real unit (2026-08-31) via stock U-Boot TFTP —
+zero flash writes:
+
+- NAND driver probes; all 10 stock partitions, exact layout
+- mtd reads byte-identical to a verified backup (md5, twice) — with a
+  live single-bit ECC correction along the way
+- both radios on air (2.4 GHz rt2800soc + 5 GHz MT7612E), switch OK
+- kernel 6.18.44 — the same version the unit's proven X-Wrt build runs
+
+CI builds all six image types green in ~50 min. Remaining step:
+permanent install via sysupgrade — procedure in
+[RECOVERY.md](RECOVERY.md).
 
 ## Hardware
 
@@ -17,45 +32,40 @@ repo lifts exactly that work onto ImmortalWrt.
 | WiFi | 2.4 GHz rt2800soc (SoC) + 5 GHz MT7612E (PCIe, mt76x2) |
 | Ethernet | 3× 100M (2 LAN, 1 WAN) |
 | USB | 1× USB 2.0 |
-| Serial | 115200 8N1, 3.3V TTL |
+| Serial | 115200 8N1, 3.3 V TTL |
 
-## Layout — two equivalent ways to apply the port
+"R3" only — the 3G/3C/3A/3P are different SoCs and share nothing here.
 
-| | mechanism | use when |
-|---|---|---|
-| `patches/` | two-commit `git am` series (driver, then device), generated against ImmortalWrt master `db5c5de` (2026-08-30) | reviewing the change, upstreaming, deterministic CI builds |
-| `scripts/apply-r3-support.sh` + `vendor/x-wrt/` | idempotent installer; auto-detects `KERNEL_PATCHVER`, so it also handles 25.12 / kernel 6.12 trees | day-to-day builds, other branches, after upstream drift breaks the patches |
+## Repo layout
 
-Both were verified to produce functionally identical trees (differences
-are ordering/comments only). `scripts/fetch-vendor.sh` refreshes
-`vendor/x-wrt/` from x-wrt master and records the HEAD it read —
-x-wrt rebases continuously, so file contents are vendored instead of
-pinning commit SHAs (see `vendor/x-wrt/PROVENANCE.md`).
+| | |
+|---|---|
+| `patches/` | two-commit `git am` series (driver, device) vs ImmortalWrt master `db5c5de` — the reviewable/upstreamable form |
+| `scripts/apply-r3-support.sh` | idempotent installer; auto-detects `KERNEL_PATCHVER` (works on 25.12/6.12 trees too) |
+| `vendor/x-wrt/` | pinned x-wrt sources + [PROVENANCE.md](vendor/x-wrt/PROVENANCE.md); refresh via `scripts/fetch-vendor.sh` |
+| `config.seed` | build seed (target + device + LuCI) |
+| `docker/`, `build.ps1` | local containerized build |
+| `.github/workflows/build.yml` | CI build, images as artifact |
+| `docs/PORT-NOTES.md` | background: removal history, driver internals, corrections, ranked approaches |
+| `RECOVERY.md` | device runbook: serial/U-Boot reference, RAM-boot testing, install, recovery ladder |
+| `reference/` | upstream file snapshots used during analysis |
 
-The port touches 10 places in the tree: NAND driver
-(`ralink_nand.[ch]`, bypasses the rawnand framework — that is why it
-survives kernel churn), kernel Kconfig hook patch, DTS (stock partition
-layout: dual kernel slots + 118 MiB UBI), image recipes, `nand`
-feature flag, UBI/UBIFS kernel config for mt7620 (+ symbol disabled for
-mt76x8), nand sysupgrade with bootloader detection (stock U-Boot /
-breed / pb-boot), switch-port + MAC setup, uboot-envtools entry.
+Both apply mechanisms produce functionally identical trees (verified by
+tree-diff). The port totals 10 touch points; original work by
+Chen Minqiang (x-wrt), GPL-2.0.
 
-Everything derives from x-wrt work by Chen Minqiang, GPL-2.0.
-`reference/` holds upstream file snapshots used during analysis;
-`r3-port-notes.html` is the research write-up.
+## Building
 
-## Building (Docker, recommended)
+**CI (recommended):** push to GitHub → the workflow builds master and
+uploads `immortalwrt-xiaomi-miwifi-r3` (~50 min). Manual dispatch
+accepts another ImmortalWrt ref.
 
-```powershell
-.\build.ps1
-```
+**Docker, local:** `.\build.ps1` — clones into a named volume, applies
+`patches/`, drops images in `out\`. `-Shell` for an interactive build
+environment. (First run downloads a few hundred MB — on a slow
+connection, prefer CI.)
 
-First run clones ImmortalWrt into a named volume (`iwrt-src`), applies
-`patches/`, builds, and drops images into `out\`. Expect 1–3 h the
-first time; re-runs reuse the volume and download cache.
-`.\build.ps1 -Shell` opens a shell in the build environment instead.
-
-## Building (manual, any tree)
+**Manual, any tree:**
 
 ```bash
 git clone https://github.com/immortalwrt/immortalwrt.git
@@ -66,24 +76,17 @@ cp ../config.seed .config && make defconfig
 make -j"$(nproc)" download && make -j"$(nproc)"
 ```
 
-Images land in `bin/targets/ramips/mt7620/`. For an
-ImmortalWrt 25.12 (kernel 6.12) tree the same command works — the
-installer picks the 6.12 variant of the kernel patch automatically.
-Master is the primary target because the running X-Wrt install on this
-router is kernel 6.18.44, i.e. this exact driver is proven on 6.18 on
-this exact device.
+Images land in `bin/targets/ramips/mt7620/`:
+`sysupgrade.bin` (nand sysupgrade), `initramfs-kernel.bin` (RAM-boot
+test/recovery image), `factory.bin` / `breed-factory.bin`
+(pb-boot/breed formats), `kernel1.bin` + `rootfs0.bin` (split).
 
-## CI
+Note: `make defconfig` does **not** include LuCI on its own —
+`config.seed` adds it explicitly.
 
-`.github/workflows/build.yml` builds the series against master and
-uploads the images as an artifact. Push this repo to GitHub
-(`gh repo create`) to enable it; also runnable manually via
-workflow_dispatch with a different ImmortalWrt ref.
+## Flashing
 
-## Flashing — read RECOVERY.md first
-
-Do not flash anything before working through [RECOVERY.md](RECOVERY.md).
-Short version: the router still runs the stock read-only U-Boot with no
-usable recovery path; install pb-boot (web recovery) first, and keep the
-verified NAND backup in `D:\r3-backup` safe. The `factory.bin` image
-this repo builds is exactly what pb-boot's web recovery flashes.
+Read [RECOVERY.md](RECOVERY.md) first — it encodes the safety doctrine
+this port was built under: the stock bootloader is never modified,
+every image is RAM-tested via TFTP before touching flash, and a
+verified full-NAND backup plus working serial console back every step.
