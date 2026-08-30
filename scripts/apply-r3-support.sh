@@ -197,7 +197,8 @@ NS="$TREE/package/base-files/files/lib/upgrade/nand.sh"
 if grep -q 'CI_KERNPART_EXT' "$NS" 2>/dev/null; then
 	say "base-files/.../nand.sh" "already present, skipped"
 else
-	if patch -d "$TREE" -p1 -N -s < "$HERE"/patches/0003-*.patch; then
+	P3=$(ls "$HERE"/patches/0003-*.patch 2>/dev/null | head -n1)
+	if [ -n "$P3" ] && patch -d "$TREE" -p1 -N -s < "$P3"; then
 		say "base-files/.../nand.sh" "CI_KERNPART_EXT support applied"
 	else
 		echo "ERROR: nand.sh patch failed - apply patches/0003 by hand" >&2

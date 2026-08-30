@@ -34,12 +34,8 @@ jobs:
           git clone --depth=1 -b "${{ github.event.inputs.ref || 'master' }}" \
             https://github.com/immortalwrt/immortalwrt.git
 
-      - name: Apply patch series
-        run: |
-          cd immortalwrt
-          git config user.name ci
-          git config user.email ci@local
-          git am --3way ../patches/*.patch
+      - name: Apply the port
+        run: sh scripts/apply-r3-support.sh immortalwrt
 
       - name: Configure
         run: |

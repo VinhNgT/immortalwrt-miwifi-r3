@@ -62,7 +62,13 @@ Chen Minqiang (x-wrt), GPL-2.0.
 
 **CI (recommended):** push to GitHub → the workflow builds master and
 uploads `immortalwrt-xiaomi-miwifi-r3` (~50 min). Manual dispatch
-accepts another ImmortalWrt ref.
+accepts any ImmortalWrt ref — branch or tag, e.g. `v25.12.1`; the
+apply step uses the version-aware installer script, so 6.12 and 6.18
+trees both work (validated against `v25.12.1` on 2026-08-31):
+
+```bash
+gh workflow run build.yml -f ref=v25.12.1
+```
 
 **Docker, local:** `.\build.ps1` — clones into a named volume, applies
 `patches/`, drops images in `out\`. `-Shell` for an interactive build
