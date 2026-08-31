@@ -19,13 +19,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          sudo docker image prune -af
-          df -h /
+      # Current ubuntu runners have ~88G free on a 145G disk; the build peaks
+      # around 30-40G, so no preinstalled-software purge is needed. If this
+      # ever prints a small disk again, restore the rm -rf of
+      # /usr/share/dotnet /usr/local/lib/android /opt/hostedtoolcache/CodeQL.
+      - name: Report disk space
+        run: df -h /
 
       - name: Install build deps
         run: |
@@ -51,7 +52,7 @@ jobs:
       # is complete and a miss saves once after `make download`.
       - name: Restore download cache
         id: cache-dl
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: immortalwrt/dl
           key: dl-${{ env.BUILD_REF }}
@@ -66,7 +67,7 @@ jobs:
       # miss cleanly and rebuild. No cross-ref fallback on purpose.
       - name: Restore toolchain cache
         id: cache-toolchain
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: |
             immortalwrt/staging_dir/host*
@@ -82,12 +83,22 @@ jobs:
         run: find immortalwrt/staging_dir immortalwrt/build_dir -type f -print0 | xargs -0 -r touch -c
 
       - name: Restore ccache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: immortalwrt/.ccache
           key: ccache-${{ env.BUILD_REF }}-${{ github.run_id }}
           restore-keys: |
             ccache-${{ env.BUILD_REF }}-
+
+      # feeds.conf.default pins every feed to an exact commit, so the
+      # checkout is deterministic; a hit turns `feeds update -a` (~90s of
+      # clones) into a no-op walk.
+      - name: Restore feeds cache
+        id: cache-feeds
+        uses: actions/cache/restore@v6
+        with:
+          path: immortalwrt/feeds
+          key: feeds-${{ env.BUILD_REF }}-${{ hashFiles('immortalwrt/feeds.conf.default') }}
       # -------------------------------------------------------------------
 
       - name: Configure
@@ -106,6 +117,13 @@ jobs:
           grep -q "^CONFIG_ALL_KMODS=y" .config
           grep -q "^CONFIG_IB=y" .config
 
+      - name: Save feeds cache
+        if: steps.cache-feeds.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: immortalwrt/feeds
+          key: ${{ steps.cache-feeds.outputs.cache-primary-key }}
+
       - name: Build toolchain
         run: |
           cd immortalwrt
@@ -114,7 +132,7 @@ jobs:
 
       - name: Save toolchain cache
         if: steps.cache-toolchain.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: |
             immortalwrt/staging_dir/host*
@@ -128,18 +146,21 @@ jobs:
 
       - name: Save download cache
         if: steps.cache-dl.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: immortalwrt/dl
           key: dl-${{ env.BUILD_REF }}
 
+      # No `|| make -j1 V=s` retry: BUILD_LOG=y already captures per-package
+      # logs (uploaded on failure), and the serial rerun burned up to an hour
+      # just to fail again.
       - name: Build
-        run: cd immortalwrt && make -j"$(nproc)" world || make -j1 V=s world
+        run: cd immortalwrt && make -j"$(nproc)" world
 
       # Save even on a failed build so the retry is cheap.
       - name: Save ccache
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: immortalwrt/.ccache
           key: ccache-${{ env.BUILD_REF }}-${{ github.run_id }}
@@ -148,7 +169,7 @@ jobs:
       # "-C toolchain/binutils ... failed to build" is undiagnosable.
       - name: Upload build logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: build-logs
           path: immortalwrt/logs/
@@ -160,7 +181,7 @@ jobs:
           cp immortalwrt/bin/targets/ramips/mt7620/*miwifi-r3* out/
           cp immortalwrt/bin/targets/ramips/mt7620/sha256sums out/ || true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: immortalwrt-xiaomi-miwifi-r3
           path: out/
@@ -168,7 +189,7 @@ jobs:
       # ImageBuilder (CONFIG_IB): prebuilt kernel + every kmod (.apk) matching
       # this build's vermagic. Assembles new package sets / installs kmods for
       # THIS build without recompiling; big (hundreds of MB), so separate.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: immortalwrt-imagebuilder-miwifi-r3
           path: immortalwrt/bin/targets/ramips/mt7620/immortalwrt-imagebuilder-*.tar.*
