@@ -85,10 +85,42 @@ detected a real single-bit flip (page 0x6b7 in `kernel_stock`, byte
 445 bit 1), corrected it, and produced output byte-identical to the
 verified backup on consecutive runs. The correction path works.
 
+### The driver corrects but never reports — patches/0004
+
+The stock driver detects and corrects single-bit ECC errors, but
+swallows the event: the mtd `_read` hook returns 0, `ecc_strength` is
+unset, and the `ecc_stats` hookup is a commented-out TODO
+(`//ranfc_mtd->ecc_stats;`). MTD core therefore never returns
+`-EUCLEAN`, so UBI's scrubbing — its rewrite-on-bitflip self-healing —
+never triggers, and weak pages get re-corrected on every read forever.
+
+Observed on the real unit (2026-08-31): the UBI attach scan corrected
+3 pages on the first flash boot, 9 later the same day after heavy
+full-NAND read activity. All were page 0 of an erase block (UBI EC
+headers, written ~2022 per the image sequence number, never rewritten
+since) and all decoded as clean single-bit corrections — random
+ECC-format garbage would do that with probability ~2^-12 per chunk, so
+these are genuine retention/read-disturb flips, not a format mismatch.
+The corrections all landed in the 0xFF padding past the 64-byte EC
+header, which is why UBI simultaneously reported 0 corrupted PEBs.
+
+`patches/0004` counts successful corrections per read op, returns the
+standard max-bitflips-per-ECC-step value from `_read`, and sets
+`ecc_strength = bitflip_threshold = 1` — with 1-bit Hamming any
+corrected step is at its limit, so an immediate `-EUCLEAN`/scrub is
+right. First boot after installing a build with the fix prints the
+corrections once more while UBI rewrites those blocks; after that they
+are gone, future flips self-heal, and corrections are counted in
+`/sys/class/mtd/*/corrected_bits`. Kernel partitions (mtd7/mtd8) are
+not UBI-managed — the known mtd7 flip stays until that partition is
+rewritten (harmless, dormant slot). Candidate for upstreaming to
+x-wrt.
+
 ## The port
 
-Ten touch points, all derived from x-wrt commits `387988e8c956`
-(driver) and `f4fc1766f08a` + follow-ups (device), author Chen Minqiang:
+Touch points 1–11 derived from x-wrt commits `387988e8c956`
+(driver) and `f4fc1766f08a` + follow-ups (device), author Chen
+Minqiang; 12 is our own fix on top:
 
 1. `files/drivers/mtd/maps/ralink_nand.c` — new
 2. `files/drivers/mtd/maps/ralink_nand.h` — new
@@ -111,6 +143,9 @@ Ten touch points, all derived from x-wrt commits `387988e8c956`
     variable is an x-wrt extension that stock ImmortalWrt ignores, so
     without this patch the detection lines are decorative and
     sysupgrade under breed/pb-boot would leave the booted slot stale.
+12. `files/drivers/mtd/maps/ralink_nand.c` — ECC bitflip reporting
+    (`patches/0004`, ours): see "The driver corrects but never
+    reports" above.
 
 (The original research counted eight; 9 and 10 surfaced when lifting
 the actual device commit — the first scaffold's apply script missed
@@ -123,8 +158,10 @@ so the new Kconfig symbol is visible there.
 
 Kernel target rationale: ImmortalWrt master = 6.18 = the same kernel as
 the X-Wrt build proven on this unit (6.18.44). One variable changes
-(distro), not two. The 6.12/25.12 combination is compiled by no one —
-x-wrt's mt7620 has only `config-6.18`.
+(distro), not two. The 6.12/25.12 combination was compiled by no one —
+x-wrt's mt7620 has only `config-6.18` — until this port: `v25.12.1`
+(kernel 6.12.94) built green in CI and runs on the unit (installed
+2026-08-31, clean boot, UBI 944/0/0).
 
 Image formats: `sysupgrade.bin` (nand sysupgrade tar + metadata),
 `kernel1.bin`/`rootfs0.bin` (split), `factory.bin` (kernel padded to

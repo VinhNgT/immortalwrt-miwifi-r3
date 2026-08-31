@@ -24,6 +24,9 @@ kept): the upgrade wrote the correct kernel slot, the NAND driver and
 UBI came up clean on the real flash boot (944 PEBs, 0 bad,
 0 corrupted), and the system boots repeatably to a login prompt with
 LuCI at 192.168.1.1. The stock bootloader was never modified.
+Same day, `v25.12.1` (kernel 6.12.94) was built via manual dispatch
+and installed the same way — the first time this driver has run on a
+6.12 kernel anywhere — and boots clean.
 Procedures and recovery ladder: [RECOVERY.md](RECOVERY.md).
 
 ## Hardware
@@ -44,7 +47,7 @@ Procedures and recovery ladder: [RECOVERY.md](RECOVERY.md).
 
 | | |
 |---|---|
-| `patches/` | two-commit `git am` series (driver, device) vs ImmortalWrt master `db5c5de` — the reviewable/upstreamable form |
+| `patches/` | four-commit `git am` series (driver, device, dual-slot nand.sh, ECC bitflip reporting) vs ImmortalWrt master `db5c5de` — the reviewable/upstreamable form |
 | `scripts/apply-r3-support.sh` | idempotent installer; auto-detects `KERNEL_PATCHVER` (works on 25.12/6.12 trees too) |
 | `vendor/x-wrt/` | pinned x-wrt sources + [PROVENANCE.md](vendor/x-wrt/PROVENANCE.md); refresh via `scripts/fetch-vendor.sh` |
 | `config.seed` | build seed (target + device + LuCI) |

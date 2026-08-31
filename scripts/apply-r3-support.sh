@@ -206,6 +206,20 @@ else
 	fi
 fi
 
+# --------------------------- 11. driver: report bitflips so UBI can scrub
+DRV="$R/files/drivers/mtd/maps/ralink_nand.c"
+if grep -q 'ranfc_ecc_corrected' "$DRV" 2>/dev/null; then
+	say "files/.../ralink_nand.c (ecc report)" "already present, skipped"
+else
+	P4=$(ls "$HERE"/patches/0004-*.patch 2>/dev/null | head -n1)
+	if [ -n "$P4" ] && patch -d "$TREE" -p1 -N -s < "$P4"; then
+		say "files/.../ralink_nand.c (ecc report)" "bitflip reporting applied"
+	else
+		echo "ERROR: ralink_nand.c ecc-report patch failed - apply patches/0004 by hand" >&2
+		exit 1
+	fi
+fi
+
 echo
 echo "Done. Next:"
 echo "  cd $TREE"

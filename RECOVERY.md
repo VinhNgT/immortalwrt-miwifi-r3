@@ -18,8 +18,17 @@ not from wikis. Background and research history: [docs/PORT-NOTES.md](docs/PORT-
   is the live slot.
 - The stock bootloader has **no USB and no web recovery**. Serial is
   the backstop, and it works (CP2102 on COM5, 115200 8N1).
-- NAND: ESMT F59L1G81LA, 0 bad eraseblocks; one single-bit flip in
-  `kernel_stock` (page 0x6b7) that ECC corrects on every read.
+- NAND: ESMT F59L1G81LA, 0 bad eraseblocks. Single-bit retention
+  flips exist in long-unwritten pages (one in `kernel_stock` page
+  0x6b7; several in ~2022-era UBI EC headers) — the driver's ECC
+  corrects them on every read. Builds with `patches/0004` report
+  corrections to MTD (`-EUCLEAN`), so UBI scrubs (rewrites) affected
+  blocks automatically: expect the `nfc_ecc_verify`/`correct byte`
+  boot messages **once** on the first boot of such a build, then
+  silence; a *reappearing* page after that means a fresh flip (it
+  will self-heal on the next read). mtd7/mtd8 are not UBI-managed —
+  the mtd7 flip stays until that partition is rewritten (harmless,
+  dormant slot).
 
 ## The backup — do not lose this
 
