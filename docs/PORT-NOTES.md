@@ -116,11 +116,42 @@ not UBI-managed — the known mtd7 flip stays until that partition is
 rewritten (harmless, dormant slot). Candidate for upstreaming to
 x-wrt.
 
+### The standalone ImageBuilder is a sealed universe — patches/0005
+
+ImmortalWrt defaults to `CONFIG_IB_STANDALONE=y`, which makes the
+ImageBuilder bundle every package the firmware build produced — but
+write **no** `repositories` file at all. First real-world use (the
+immortalwrt-build-web preset list, 2026-08-31) failed on exactly that:
+every kmod resolved from the bundle, while `curl`, `htop`, `nano` and
+the `luci-app-*`/`luci-proto-*` companions came back "no such package"
+— they are plain userland packages our build never compiled, and the
+IB had nowhere else to look. Turning IB_STANDALONE off is not an
+option here: that variant lists the per-target feed (whose kmods carry
+the official kernel's vermagic, useless to us) and bundles only
+base-files/libc/kernel, discarding the ALL_KMODS point entirely.
+
+`patches/0005` makes the standalone apk ImageBuilder emit a
+`repositories` file listing only the **per-arch userland feeds**
+(`packages/mipsel_24kc/{base,packages,luci,routing,telephony}`),
+mirroring upstream's `FeedSourcesAppendAPK` minus its per-target and
+kmods lines. Kernel-dependent packages keep resolving exclusively from
+the bundled `packages/` directory (apk pins the exact kernel version,
+so a foreign kmod could not sneak in even if a remote feed offered
+one), while any of the thousands of release userland packages installs
+on demand — signature-verified, since the IB already ships the distro
+public keys in `keys/`. Verified end-to-end against the run-33351584447
+artifact with a hand-written `repositories` file: 217-package image,
+kmods at `6.12.94~b22042c4…`, userland from the official feeds.
+`config.seed` also sets `CONFIG_FEED_video=m` — the 25.12 release repo
+publishes no video feed, and `=m` keeps its URL commented out instead
+of 404-warning on every apk update (on the router's own feed list
+too). Also a candidate for upstreaming, to ImmortalWrt itself.
+
 ## The port
 
 Touch points 1–11 derived from x-wrt commits `387988e8c956`
 (driver) and `f4fc1766f08a` + follow-ups (device), author Chen
-Minqiang; 12 is our own fix on top:
+Minqiang; 12 and 13 are our own fixes on top:
 
 1. `files/drivers/mtd/maps/ralink_nand.c` — new
 2. `files/drivers/mtd/maps/ralink_nand.h` — new
@@ -146,6 +177,9 @@ Minqiang; 12 is our own fix on top:
 12. `files/drivers/mtd/maps/ralink_nand.c` — ECC bitflip reporting
     (`patches/0004`, ours): see "The driver corrects but never
     reports" above.
+13. `target/imagebuilder/Makefile` — userland feeds in the standalone
+    apk ImageBuilder (`patches/0005`, ours): see "The standalone
+    ImageBuilder is a sealed universe" above.
 
 (The original research counted eight; 9 and 10 surfaced when lifting
 the actual device commit — the first scaffold's apply script missed

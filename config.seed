@@ -10,5 +10,11 @@ CONFIG_ALL_KMODS=y
 # Produce an ImageBuilder: prebuilt kernel + all packages, assembles custom
 # images for this device in ~1 min without a toolchain
 CONFIG_IB=y
-# Compiler cache — CI persists .ccache/ across runs
+# Compiler cache — CI persists .ccache/ across runs. CCACHE is only visible
+# under DEVEL ("Advanced configuration options"); without DEVEL=y defconfig
+# silently drops CCACHE=y (verified: run 33351584447 built without ccache)
+CONFIG_DEVEL=y
 CONFIG_CCACHE=y
+# The 25.12 release repo publishes no video feed; =m keeps its URL commented
+# out in the ImageBuilder/router feed lists instead of 404ing on every update
+CONFIG_FEED_video=m

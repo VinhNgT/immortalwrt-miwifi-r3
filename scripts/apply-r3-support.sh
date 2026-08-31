@@ -220,6 +220,20 @@ else
 	fi
 fi
 
+# ------------------ 12. ImageBuilder: userland feeds for standalone apk builds
+IBMK="$TREE/target/imagebuilder/Makefile"
+if grep -q 'Remote userland feeds' "$IBMK" 2>/dev/null; then
+	say "target/imagebuilder/Makefile" "already present, skipped"
+else
+	P5=$(ls "$HERE"/patches/0005-*.patch 2>/dev/null | head -n1)
+	if [ -n "$P5" ] && patch -d "$TREE" -p1 -N -s < "$P5"; then
+		say "target/imagebuilder/Makefile" "userland feeds applied"
+	else
+		echo "ERROR: imagebuilder patch failed - apply patches/0005 by hand" >&2
+		exit 1
+	fi
+fi
+
 echo
 echo "Done. Next:"
 echo "  cd $TREE"

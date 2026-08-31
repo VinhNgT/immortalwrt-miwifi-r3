@@ -47,7 +47,7 @@ Procedures and recovery ladder: [RECOVERY.md](RECOVERY.md).
 
 | | |
 |---|---|
-| `patches/` | four-commit `git am` series (driver, device, dual-slot nand.sh, ECC bitflip reporting) vs ImmortalWrt master `db5c5de` — the reviewable/upstreamable form |
+| `patches/` | five-commit `git am` series (driver, device, dual-slot nand.sh, ECC bitflip reporting, ImageBuilder userland feeds) vs ImmortalWrt master `db5c5de` — the reviewable/upstreamable form |
 | `scripts/apply-r3-support.sh` | idempotent installer; auto-detects `KERNEL_PATCHVER` (works on 25.12/6.12 trees too) |
 | `scripts/trim-mt7620-to-r3.sh` | strips all other mt7620 device recipes so the ImageBuilder offers only the R3 profile (CI runs it after the installer) |
 | `vendor/x-wrt/` | pinned x-wrt sources + [PROVENANCE.md](vendor/x-wrt/PROVENANCE.md); refresh via `scripts/fetch-vendor.sh` |
@@ -59,7 +59,7 @@ Procedures and recovery ladder: [RECOVERY.md](RECOVERY.md).
 | `reference/` | upstream file snapshots used during analysis |
 
 Both apply mechanisms produce functionally identical trees (verified by
-tree-diff). The port totals 10 touch points; original work by
+tree-diff). The port totals 13 touch points; original work by
 Chen Minqiang (x-wrt), GPL-2.0.
 
 ## Building
@@ -111,9 +111,13 @@ prebuilt kernel, the image-assembly machinery, and — via
 `CONFIG_ALL_KMODS=y` — **every kernel module** as a `.apk` built
 against that kernel's exact vermagic. This solves the missing-kmod
 problem: official-feed kmods can never match our patched kernel, but
-the ImageBuilder carries its own complete, matching set. Image recipes
-are trimmed to the R3 (`scripts/trim-mt7620-to-r3.sh`), so `make info`
-lists exactly one profile.
+the ImageBuilder carries its own complete, matching set. Plain
+userland packages (`curl`, `luci-app-*`, …) don't need to match the
+kernel, so `patches/0005` points the ImageBuilder at the official
+per-arch feeds for those — kmods still resolve only from the bundle
+(apk pins the exact kernel version). Image recipes are trimmed to the
+R3 (`scripts/trim-mt7620-to-r3.sh`), so `make info` lists exactly one
+profile.
 
 On x86_64 Linux (WSL or Docker on Windows):
 

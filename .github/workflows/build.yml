@@ -96,7 +96,12 @@ jobs:
           ./scripts/feeds install -a
           cp ../config.seed .config
           make defconfig
+          # defconfig silently drops symbols whose prompt is hidden (CCACHE
+          # needs DEVEL) - fail loudly if a load-bearing one went missing
           grep -q "CONFIG_TARGET_ramips_mt7620_DEVICE_xiaomi_miwifi-r3=y" .config
+          grep -q "^CONFIG_CCACHE=y" .config
+          grep -q "^CONFIG_ALL_KMODS=y" .config
+          grep -q "^CONFIG_IB=y" .config
 
       - name: Build toolchain
         run: |
