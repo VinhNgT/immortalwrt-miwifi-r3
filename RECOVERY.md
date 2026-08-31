@@ -23,10 +23,15 @@ not from wikis. Background and research history: [docs/PORT-NOTES.md](docs/PORT-
   0x6b7; several in ~2022-era UBI EC headers) — the driver's ECC
   corrects them on every read. Builds with `patches/0004` report
   corrections to MTD (`-EUCLEAN`), so UBI scrubs (rewrites) affected
-  blocks automatically: expect the `nfc_ecc_verify`/`correct byte`
-  boot messages **once** on the first boot of such a build, then
-  silence; a *reappearing* page after that means a fresh flip (it
-  will self-heal on the next read). mtd7/mtd8 are not UBI-managed —
+  blocks automatically. Verified 2026-08-31: the corrections appeared
+  once on the first boot of a 0004 build, and a reinstall of the same
+  image booted silent
+  ([log](docs/boot-logs/2026-08-31-first-boot-v25.12.1-p0004-ib-image.md)).
+  An occasional `nfc_ecc_verify`/`correct byte` message later is a
+  fresh retention flip being corrected — it self-heals via scrub and
+  shows up in `/sys/class/mtd/*/corrected_bits`; only *the same page
+  repeating across boots* would warrant a look. mtd7/mtd8 are not
+  UBI-managed —
   the mtd7 flip stays until that partition is rewritten (harmless,
   dormant slot).
 

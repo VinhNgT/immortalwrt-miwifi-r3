@@ -26,7 +26,13 @@ UBI came up clean on the real flash boot (944 PEBs, 0 bad,
 LuCI at 192.168.1.1. The stock bootloader was never modified.
 Same day, `v25.12.1` (kernel 6.12.94) was built via manual dispatch
 and installed the same way — the first time this driver has run on a
-6.12 kernel anywhere — and boots clean.
+6.12 kernel anywhere — and boots clean. The current install is an
+**ImageBuilder-assembled** image (preset packages baked in, kmods from
+the CI bundle, userland from official feeds) with the `patches/0004`
+ECC fix — verified on hardware: the ECC corrections appeared once on
+the first boot while UBI scrubbed, a reinstall booted silent, and the
+wireguard and batman-adv kmods load from the bundle
+([boot log](docs/boot-logs/2026-08-31-first-boot-v25.12.1-p0004-ib-image.md)).
 Procedures and recovery ladder: [RECOVERY.md](RECOVERY.md).
 
 ## Hardware

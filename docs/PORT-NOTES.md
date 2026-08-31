@@ -108,9 +108,13 @@ header, which is why UBI simultaneously reported 0 corrupted PEBs.
 standard max-bitflips-per-ECC-step value from `_read`, and sets
 `ecc_strength = bitflip_threshold = 1` — with 1-bit Hamming any
 corrected step is at its limit, so an immediate `-EUCLEAN`/scrub is
-right. First boot after installing a build with the fix prints the
-corrections once more while UBI rewrites those blocks; after that they
-are gone, future flips self-heal, and corrections are counted in
+right. Verified on hardware 2026-08-31, exactly as designed: the
+first boot of a 0004 build printed the corrections once while UBI
+scrubbed the aged blocks, and a reinstall of the same image then
+booted with **zero** `nfc_ecc_verify` lines — nothing left to correct
+([boot log](boot-logs/2026-08-31-first-boot-v25.12.1-p0004-ib-image.md),
+from the silent second install). Future flips self-heal via scrub,
+and corrections are counted in
 `/sys/class/mtd/*/corrected_bits`. Kernel partitions (mtd7/mtd8) are
 not UBI-managed — the known mtd7 flip stays until that partition is
 rewritten (harmless, dormant slot). Candidate for upstreaming to
