@@ -4,3 +4,9 @@ CONFIG_TARGET_ramips=y
 CONFIG_TARGET_ramips_mt7620=y
 CONFIG_TARGET_ramips_mt7620_DEVICE_xiaomi_miwifi-r3=y
 CONFIG_PACKAGE_luci=y
+# Build every kernel module as a package (saturates vermagic: adding a kmod
+# later no longer changes the kernel, so modules stay installable per build)
+CONFIG_ALL_KMODS=y
+# Produce an ImageBuilder: prebuilt kernel + all packages, assembles custom
+# images for this device in ~1 min without a toolchain
+CONFIG_IB=y

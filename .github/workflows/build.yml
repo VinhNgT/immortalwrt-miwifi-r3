@@ -37,6 +37,9 @@ jobs:
       - name: Apply the port
         run: sh scripts/apply-r3-support.sh immortalwrt
 
+      - name: Restrict image recipes to the R3
+        run: sh scripts/trim-mt7620-to-r3.sh immortalwrt
+
       - name: Configure
         run: |
           cd immortalwrt
@@ -62,3 +65,12 @@ jobs:
         with:
           name: immortalwrt-xiaomi-miwifi-r3
           path: out/
+
+      # ImageBuilder (CONFIG_IB): prebuilt kernel + every kmod (.apk) matching
+      # this build's vermagic. Assembles new package sets / installs kmods for
+      # THIS build without recompiling; big (hundreds of MB), so separate.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: immortalwrt-imagebuilder-miwifi-r3
+          path: immortalwrt/bin/targets/ramips/mt7620/immortalwrt-imagebuilder-*.tar.*
+          if-no-files-found: error

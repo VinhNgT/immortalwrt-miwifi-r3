@@ -49,6 +49,7 @@ Procedures and recovery ladder: [RECOVERY.md](RECOVERY.md).
 |---|---|
 | `patches/` | four-commit `git am` series (driver, device, dual-slot nand.sh, ECC bitflip reporting) vs ImmortalWrt master `db5c5de` — the reviewable/upstreamable form |
 | `scripts/apply-r3-support.sh` | idempotent installer; auto-detects `KERNEL_PATCHVER` (works on 25.12/6.12 trees too) |
+| `scripts/trim-mt7620-to-r3.sh` | strips all other mt7620 device recipes so the ImageBuilder offers only the R3 profile (CI runs it after the installer) |
 | `vendor/x-wrt/` | pinned x-wrt sources + [PROVENANCE.md](vendor/x-wrt/PROVENANCE.md); refresh via `scripts/fetch-vendor.sh` |
 | `config.seed` | build seed (target + device + LuCI) |
 | `docker/`, `build.ps1` | local containerized build |
@@ -64,7 +65,10 @@ Chen Minqiang (x-wrt), GPL-2.0.
 ## Building
 
 **CI (recommended):** push to GitHub → the workflow builds master and
-uploads `immortalwrt-xiaomi-miwifi-r3` (~50 min). Manual dispatch
+uploads two artifacts: `immortalwrt-xiaomi-miwifi-r3` (the images) and
+`immortalwrt-imagebuilder-miwifi-r3` (see below). Plain image builds
+took ~50 min; `CONFIG_ALL_KMODS=y` (every kernel module compiled)
+roughly doubles that. Manual dispatch
 accepts any ImmortalWrt ref — branch or tag, e.g. `v25.12.1`; the
 apply step uses the version-aware installer script, so 6.12 and 6.18
 trees both work (validated against `v25.12.1` on 2026-08-31):
@@ -96,6 +100,36 @@ test/recovery image), `factory.bin` / `breed-factory.bin`
 
 Note: `make defconfig` does **not** include LuCI on its own —
 `config.seed` adds it explicitly.
+
+## ImageBuilder — package changes without recompiling
+
+Each CI run also produces an ImageBuilder (`CONFIG_IB=y`): the
+prebuilt kernel, the image-assembly machinery, and — via
+`CONFIG_ALL_KMODS=y` — **every kernel module** as a `.apk` built
+against that kernel's exact vermagic. This solves the missing-kmod
+problem: official-feed kmods can never match our patched kernel, but
+the ImageBuilder carries its own complete, matching set. Image recipes
+are trimmed to the R3 (`scripts/trim-mt7620-to-r3.sh`), so `make info`
+lists exactly one profile.
+
+On x86_64 Linux (WSL or Docker on Windows):
+
+```bash
+tar xf immortalwrt-imagebuilder-*.tar.zst && cd immortalwrt-imagebuilder-*/
+```
+
+```bash
+make image PROFILE=xiaomi_miwifi-r3 PACKAGES="luci kmod-batman-adv luci-proto-batman-adv batctl-default"
+```
+
+→ a fresh `sysupgrade.bin` in `bin/targets/ramips/mt7620/` in about a
+minute; flash with "Keep settings". Alternatively, skip the reflash:
+the bundled `packages/` directory is a local feed, and any `kmod-*.apk`
+from it installs directly on a router running the **same** build
+(`apk add ./kmod-….apk`). Two rules: never mix kmods across builds
+(each build is its own vermagic universe — after a reflash, use that
+run's ImageBuilder), and kernel-side changes (driver patches, kernel
+config) still need a full CI rebuild, which yields a new ImageBuilder.
 
 ## Flashing
 
