@@ -1,5 +1,8 @@
 # ImmortalWrt for the Xiaomi Mi Router 3 (miwifi-r3)
 
+> [!WARNING]
+> This project is vibe coded with Anthropic Claude Fable 5 — use at your own risk.
+
 Modern, maintained firmware for the Xiaomi Mi Router 3. Official
 OpenWrt dropped this device years ago because mainline Linux lost the
 driver for its NAND storage; this project keeps it alive on **current
