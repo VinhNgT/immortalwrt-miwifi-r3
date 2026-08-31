@@ -3,11 +3,17 @@ name: build
 on:
   push:
     branches: [main]
+    paths-ignore: ["**.md"]
   workflow_dispatch:
     inputs:
       ref:
         description: "ImmortalWrt ref to build"
-        default: "master"
+        default: "v25.12.1"
+
+# The ref the device actually runs. Push builds use it too (master builds
+# only happen via manual dispatch with ref=master).
+env:
+  BUILD_REF: ${{ github.event.inputs.ref || 'v25.12.1' }}
 
 jobs:
   build:
@@ -31,7 +37,7 @@ jobs:
 
       - name: Checkout ImmortalWrt
         run: |
-          git clone --depth=1 -b "${{ github.event.inputs.ref || 'master' }}" \
+          git clone --depth=1 -b "$BUILD_REF" \
             https://github.com/immortalwrt/immortalwrt.git
 
       - name: Apply the port
@@ -40,20 +46,95 @@ jobs:
       - name: Restrict image recipes to the R3
         run: sh scripts/trim-mt7620-to-r3.sh immortalwrt
 
+      # ---- caches -------------------------------------------------------
+      # dl/: checksum-verified tarballs; frozen per tag, so an exact-key hit
+      # is complete and a miss saves once after `make download`.
+      - name: Restore download cache
+        id: cache-dl
+        uses: actions/cache/restore@v4
+        with:
+          path: immortalwrt/dl
+          key: dl-${{ env.BUILD_REF }}
+          restore-keys: |
+            dl-
+
+      # Toolchain + host tools (~35 min cold). Keyed on the ref plus a hash
+      # of the toolchain-defining trees, so an upstream gcc/musl bump misses
+      # cleanly and rebuilds. No cross-ref fallback on purpose.
+      - name: Restore toolchain cache
+        id: cache-toolchain
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            immortalwrt/staging_dir/host*
+            immortalwrt/staging_dir/toolchain-*
+            immortalwrt/build_dir/host*
+            immortalwrt/build_dir/toolchain-*
+          key: toolchain-${{ env.BUILD_REF }}-${{ hashFiles('immortalwrt/tools/**', 'immortalwrt/toolchain/**') }}
+
+      # Cached stamps must be newer than the freshly-cloned sources or make
+      # re-does the work the cache was meant to skip.
+      - name: Refresh cached toolchain timestamps
+        if: steps.cache-toolchain.outputs.cache-hit == 'true'
+        run: find immortalwrt/staging_dir immortalwrt/build_dir -type f -print0 | xargs -0 -r touch -c
+
+      - name: Restore ccache
+        uses: actions/cache/restore@v4
+        with:
+          path: immortalwrt/.ccache
+          key: ccache-${{ env.BUILD_REF }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ env.BUILD_REF }}-
+      # -------------------------------------------------------------------
+
       - name: Configure
         run: |
           cd immortalwrt
+          mkdir -p .ccache
+          printf 'max_size = 1.5G\n' > .ccache/ccache.conf
           ./scripts/feeds update -a
           ./scripts/feeds install -a
           cp ../config.seed .config
           make defconfig
           grep -q "CONFIG_TARGET_ramips_mt7620_DEVICE_xiaomi_miwifi-r3=y" .config
 
+      - name: Build toolchain
+        run: |
+          cd immortalwrt
+          make -j"$(nproc)" tools/install
+          make -j"$(nproc)" toolchain/install
+
+      - name: Save toolchain cache
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            immortalwrt/staging_dir/host*
+            immortalwrt/staging_dir/toolchain-*
+            immortalwrt/build_dir/host*
+            immortalwrt/build_dir/toolchain-*
+          key: ${{ steps.cache-toolchain.outputs.cache-primary-key }}
+
       - name: Download sources
         run: cd immortalwrt && make -j"$(nproc)" download
 
+      - name: Save download cache
+        if: steps.cache-dl.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: immortalwrt/dl
+          key: dl-${{ env.BUILD_REF }}
+
       - name: Build
         run: cd immortalwrt && make -j"$(nproc)" world || make -j1 V=s world
+
+      # Save even on a failed build so the retry is cheap.
+      - name: Save ccache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: immortalwrt/.ccache
+          key: ccache-${{ env.BUILD_REF }}-${{ github.run_id }}
 
       - name: Collect artifacts
         run: |

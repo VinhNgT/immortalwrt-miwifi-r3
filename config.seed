@@ -10,3 +10,5 @@ CONFIG_ALL_KMODS=y
 # Produce an ImageBuilder: prebuilt kernel + all packages, assembles custom
 # images for this device in ~1 min without a toolchain
 CONFIG_IB=y
+# Compiler cache — CI persists .ccache/ across runs
+CONFIG_CCACHE=y

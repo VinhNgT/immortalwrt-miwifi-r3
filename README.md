@@ -64,11 +64,14 @@ Chen Minqiang (x-wrt), GPL-2.0.
 
 ## Building
 
-**CI (recommended):** push to GitHub → the workflow builds master and
-uploads two artifacts: `immortalwrt-xiaomi-miwifi-r3` (the images) and
+**CI (recommended):** push to GitHub → the workflow builds `v25.12.1`
+(the ref the device runs; docs-only pushes skip the build) and uploads
+two artifacts: `immortalwrt-xiaomi-miwifi-r3` (the images) and
 `immortalwrt-imagebuilder-miwifi-r3` (see below). Plain image builds
 took ~50 min; `CONFIG_ALL_KMODS=y` (every kernel module compiled)
-roughly doubles that. Manual dispatch
+roughly doubles that cold, but the workflow caches `dl/`, ccache, and
+the toolchain (keyed per ref, quota-safe), so warm rebuilds of the
+same ref drop back to roughly the old time. Manual dispatch
 accepts any ImmortalWrt ref — branch or tag, e.g. `v25.12.1`; the
 apply step uses the version-aware installer script, so 6.12 and 6.18
 trees both work (validated against `v25.12.1` on 2026-08-31):
