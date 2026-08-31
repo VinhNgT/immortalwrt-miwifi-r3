@@ -4,7 +4,7 @@ This is the project's trial-and-error record: dead ends, corrected
 assumptions, investigation narratives, and CI incidents, kept so that
 future work doesn't re-make old mistakes. It is deliberately separate
 from the reference documentation — read [PORT-NOTES.md](PORT-NOTES.md)
-for *what is true* and [../RECOVERY.md](../RECOVERY.md) for *what to
+for *what is true* and [RECOVERY.md](RECOVERY.md) for *what to
 do*; read this file before **re-researching** anything.
 
 All dates 2026. Everything was verified against primary sources (git

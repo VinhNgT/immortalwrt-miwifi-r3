@@ -4,7 +4,7 @@ What this port changes and why, written to stand alone. How these
 conclusions were reached — including dead ends and corrected
 assumptions — lives in [RESEARCH-LOG.md](RESEARCH-LOG.md). Operating
 the device (flashing, recovery, serial) is covered by
-[../RECOVERY.md](../RECOVERY.md).
+[RECOVERY.md](RECOVERY.md).
 
 ## Why the device fell out of OpenWrt
 

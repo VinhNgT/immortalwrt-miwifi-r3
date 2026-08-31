@@ -1,13 +1,14 @@
-# Mi Router 3 — device runbook: recovery, testing, flashing
+# Mi Router 3 — recovery runbook
 
-Procedures for operating a Xiaomi Mi Router 3 (R3) running this
-port. Everything here was established by direct on-device inspection
-and live serial sessions on a real unit (2026-08-30/31), not from
-wikis — where behavior could plausibly vary between units, that is
-noted. Background on the port itself:
-[docs/PORT-NOTES.md](docs/PORT-NOTES.md). (Owner's device-specific
-data — serial number, backup checksums, local paths — lives in
-`PRIVATE-NOTES.md`, which is git-ignored and never published.)
+Backup, serial console, and every path back from a bad flash on a
+Xiaomi Mi Router 3 (R3) running this port. Normal installation and
+upgrades are in [GUIDE.md](GUIDE.md); this file is for prevention and
+repair. Everything here was established by direct on-device
+inspection and live serial sessions on a real unit (2026-08-30/31),
+not from wikis — where behavior could plausibly vary between units,
+that is noted. (Owner's device-specific data — serial number, backup
+checksums, local paths — lives in `PRIVATE-NOTES.md` in the repo
+root, which is git-ignored and never published.)
 
 ## Standing facts
 
@@ -31,13 +32,13 @@ data — serial number, backup checksums, local paths — lives in
   on every read, and builds with `patches/0004` additionally report
   them to MTD so UBI scrubs (rewrites) the affected blocks —
   hardware-verified
-  ([log](docs/boot-logs/2026-08-31-first-boot-v25.12.1-p0004-ib-image.md)).
+  ([log](boot-logs/2026-08-31-first-boot-v25.12.1-p0004-ib-image.md)).
   An occasional `nfc_ecc_verify`/`correct byte` message is a
-  fresh flip being corrected — it self-heals via scrub and shows in
-  `/sys/class/mtd/*/corrected_bits`; only *the same page repeating
-  across boots* warrants a look. mtd7/mtd8 are not UBI-managed — a
-  flip there stays until that partition is rewritten (harmless in the
-  dormant slot).
+  fresh retention flip being corrected — it self-heals via scrub and
+  shows in `/sys/class/mtd/*/corrected_bits`; only *the same page
+  repeating across boots* warrants a look. mtd7/mtd8 are not
+  UBI-managed — a flip there stays until that partition is rewritten
+  (harmless in the dormant slot).
 
 ## The backup — make one before anything else
 
@@ -69,7 +70,10 @@ mtd3 `factory` holds the RF calibration and MACs and is
 4. Serial: 3.3 V TTL, RX→TX, TX→RX, GND→GND, **VCC not connected**.
 5. In the U-Boot menu, **option 9 writes the bootloader to flash** —
    never select it casually. There is no RAM-test menu option.
-6. Flash over LAN cable, never WiFi; never power off mid-write.
+6. **Never power off mid-write.** Flashing over WiFi is fine —
+   sysupgrade uploads the whole image to RAM before writing — but
+   bootloader-level recovery (U-Boot, TFTP) only exists on the wired
+   ports, so keep a LAN cable within reach.
 
 ## Recovery ladder
 
@@ -144,37 +148,8 @@ This is the procedure that proved the port before anything was ever
 flashed: a RAM-booted image showed all 10 partitions with the exact
 stock layout, partition reads byte-identical to the backup, and both
 radios working (details in
-[docs/RESEARCH-LOG.md](docs/RESEARCH-LOG.md#timeline)). Use it the
-same way to vet any new build.
-
-## Installing ImmortalWrt (permanent)
-
-Use a build whose seed includes LuCI (`config.seed` in this repo
-does). Get `…squashfs-sysupgrade.bin` from a GitHub release of this
-repo (or build one with that release's ImageBuilder — see README).
-
-Via the running firmware's web UI (on X-Wrt that is LuCI at its
-default `192.168.15.1`):
-
-1. PC on a LAN cable; serial console attached and logging is nice to
-   have.
-2. System → Backup / Flash Firmware → flash the `…sysupgrade.bin`.
-3. When coming **from a different firmware family**, uncheck "Keep
-   settings" (= `sysupgrade -n`) — old config must not carry over.
-   Between builds of this same port, keeping settings is fine.
-4. Verify the displayed checksum against the release's `sha256sums`,
-   proceed, and leave the device alone for 3–5 minutes.
-5. After a cross-family flash the address changes to
-   **`192.168.1.1`**, user `root`, no password — set one immediately.
-   WiFi broadcasts as "ImmortalWrt".
-
-CLI equivalent: `scp` the image to `/tmp`,
-`sysupgrade [-n] /tmp/….bin`.
-
-Slot behavior (from this port's `platform.sh`): with stock U-Boot on
-mtd0 the kernel is written to `kernel` (mtd8) — the slot the boot
-flags already point at. If the upgrader ever refuses an image as
-incompatible, stop and investigate; do not force.
+[RESEARCH-LOG.md](RESEARCH-LOG.md#timeline)). Use it the same way to
+vet any new build.
 
 ## Reverting to X-Wrt
 
@@ -196,7 +171,7 @@ byte-verified — its official source is dead and no hash was ever
 published. Serial + RAM-boot + the backup already cover every failure
 mode. The full forensic record (provenance, binary analysis, verified
 behavior, residual unknowns) is in
-[docs/RESEARCH-LOG.md](docs/RESEARCH-LOG.md#pb-boot--the-full-research-trail-decision-not-installed).
+[RESEARCH-LOG.md](RESEARCH-LOG.md#pb-boot--the-full-research-trail-decision-not-installed).
 
 Facts that matter even without installing it:
 
