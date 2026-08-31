@@ -1,39 +1,39 @@
 # ImmortalWrt for the Xiaomi Mi Router 3 (miwifi-r3)
 
-Out-of-tree port bringing the Xiaomi Mi Router 3 back to current
-ImmortalWrt (master, kernel 6.18). The device was dropped when OpenWrt
-lost the MT7620 raw-NAND driver at the 4.4 → 4.9 kernel bump; X-Wrt
-kept an out-of-tree driver alive, and this repo lifts that work onto
-ImmortalWrt. History, driver analysis, and research corrections:
+Out-of-tree port that keeps the Xiaomi Mi Router 3 on **current
+ImmortalWrt** (tested on master/kernel 6.18 and the `v25.12.1`
+release/kernel 6.12). The device was dropped from OpenWrt when the
+MT7620 raw-NAND driver was lost in the 4.4 → 4.9 kernel bump; X-Wrt
+kept an out-of-tree driver alive, and this repo grafts that work —
+plus fixes of its own — onto ImmortalWrt as a patch series and an
+idempotent installer script. Full technical background:
 [docs/PORT-NOTES.md](docs/PORT-NOTES.md).
 
-## Status: proven on hardware
+## Status
 
-RAM-booted on the real unit (2026-08-31) via stock U-Boot TFTP —
-zero flash writes:
+Complete, verified on real hardware.
 
-- NAND driver probes; all 10 stock partitions, exact layout
-- mtd reads byte-identical to a verified backup (md5, twice) — with a
-  live single-bit ECC correction along the way
-- both radios on air (2.4 GHz rt2800soc + 5 GHz MT7612E), switch OK
-- kernel 6.18.44 — the same version the unit's proven X-Wrt build runs
+**What works:** the NAND driver with the full 10-partition stock
+layout, UBI rootfs, both radios, switch, USB, LuCI, and normal
+sysupgrade — on kernel 6.12 (`v25.12.1` release) and 6.18 (master).
+This is the only known build of this driver on a 6.12 kernel.
 
-CI builds all six image types green in ~50 min. **Installed to flash
-2026-08-31** via plain sysupgrade from X-Wrt (web UI, settings not
-kept): the upgrade wrote the correct kernel slot, the NAND driver and
-UBI came up clean on the real flash boot (944 PEBs, 0 bad,
-0 corrupted), and the system boots repeatably to a login prompt with
-LuCI at 192.168.1.1. The stock bootloader was never modified.
-Same day, `v25.12.1` (kernel 6.12.94) was built via manual dispatch
-and installed the same way — the first time this driver has run on a
-6.12 kernel anywhere — and boots clean. The current install is an
-**ImageBuilder-assembled** image (preset packages baked in, kmods from
-the CI bundle, userland from official feeds) with the `patches/0004`
-ECC fix — verified on hardware: the ECC corrections appeared once on
-the first boot while UBI scrubbed, a reinstall booted silent, and the
-wireguard and batman-adv kmods load from the bundle
-([boot log](docs/boot-logs/2026-08-31-first-boot-v25.12.1-p0004-ib-image.md)).
-Procedures and recovery ladder: [RECOVERY.md](RECOVERY.md).
+**Verification approach:** every image can be RAM-booted over TFTP
+(zero flash writes) before it touches flash; partition reads were
+checked byte-identical against a full NAND backup; installation is
+plain sysupgrade; the stock bootloader is never modified
+([archived boot log](docs/boot-logs/2026-08-31-first-boot-v25.12.1-p0004-ib-image.md)).
+
+**Beyond a straight port**, two upstream defects are fixed here
+(details in [docs/PORT-NOTES.md](docs/PORT-NOTES.md)):
+
+- `patches/0004` — the driver corrected single-bit NAND errors but
+  never reported them, so UBI's self-healing never ran; bitflips now
+  scrub automatically.
+- `patches/0005` (+ `ALL_KMODS` + a per-run ImageBuilder) — kernel
+  modules remain installable despite the self-built kernel's
+  vermagic — see
+  [ImageBuilder](#imagebuilder--package-changes-without-recompiling).
 
 ## Hardware
 
@@ -47,49 +47,47 @@ Procedures and recovery ladder: [RECOVERY.md](RECOVERY.md).
 | USB | 1× USB 2.0 |
 | Serial | 115200 8N1, 3.3 V TTL |
 
-"R3" only — the 3G/3C/3A/3P are different SoCs and share nothing here.
+"R3" only — the 3G/3C/3A/3P are different SoCs and share nothing
+here.
 
 ## Repo layout
 
 | | |
 |---|---|
-| `patches/` | five-commit `git am` series (driver, device, dual-slot nand.sh, ECC bitflip reporting, ImageBuilder userland feeds) vs ImmortalWrt master `db5c5de` — the reviewable/upstreamable form |
-| `scripts/apply-r3-support.sh` | idempotent installer; auto-detects `KERNEL_PATCHVER` (works on 25.12/6.12 trees too) |
+| `patches/` | five-commit `git am` series vs ImmortalWrt master `db5c5de` (driver, device, dual-slot nand.sh, ECC reporting, ImageBuilder feeds) — the reviewable/upstreamable form |
+| `scripts/apply-r3-support.sh` | idempotent installer; auto-detects `KERNEL_PATCHVER` (works on 6.12 and 6.18 trees) |
 | `scripts/trim-mt7620-to-r3.sh` | strips all other mt7620 device recipes so the ImageBuilder offers only the R3 profile (CI runs it after the installer) |
 | `vendor/x-wrt/` | pinned x-wrt sources + [PROVENANCE.md](vendor/x-wrt/PROVENANCE.md); refresh via `scripts/fetch-vendor.sh` |
-| `config.seed` | build seed (target + device + LuCI) |
+| `config.seed` | build seed (target + device + LuCI + kmod/IB/ccache options, each explained inline) |
 | `docker/`, `build.ps1` | local containerized build |
-| `.github/workflows/build.yml` | CI build, images as artifact |
-| `docs/PORT-NOTES.md` | background: removal history, driver internals, corrections, ranked approaches |
-| `RECOVERY.md` | device runbook: serial/U-Boot reference, RAM-boot testing, install, recovery ladder |
+| `.github/workflows/build.yml` | CI: build, cache, upload image + ImageBuilder artifacts |
+| `docs/PORT-NOTES.md` | technical reference: driver, the 13 touch points, patches 0004/0005 |
+| `docs/RESEARCH-LOG.md` | how the conclusions were reached — corrections, dead ends, incidents |
+| `docs/boot-logs/` | archived (redacted) boot logs from real hardware |
+| `RECOVERY.md` | device runbook: serial/U-Boot, RAM-boot testing, install, recovery ladder |
 | `reference/` | upstream file snapshots used during analysis |
 
-Both apply mechanisms produce functionally identical trees (verified by
-tree-diff). The port totals 13 touch points; original work by
-Chen Minqiang (x-wrt), GPL-2.0.
+Both apply mechanisms produce functionally identical trees (verified
+by tree-diff). The port totals 13 touch points; original driver and
+device work by Chen Minqiang (x-wrt), GPL-2.0.
 
 ## Building
 
-**CI (recommended):** push to GitHub → the workflow builds `v25.12.1`
-(the ref the device runs; docs-only pushes skip the build) and uploads
-two artifacts: `immortalwrt-xiaomi-miwifi-r3` (the images) and
-`immortalwrt-imagebuilder-miwifi-r3` (see below). Plain image builds
-took ~50 min; `CONFIG_ALL_KMODS=y` (every kernel module compiled)
-roughly doubles that cold, but the workflow caches `dl/`, ccache, and
-the toolchain (keyed per ref, quota-safe), so warm rebuilds of the
-same ref drop back to roughly the old time. Manual dispatch
-accepts any ImmortalWrt ref — branch or tag, e.g. `v25.12.1`; the
-apply step uses the version-aware installer script, so 6.12 and 6.18
-trees both work (validated against `v25.12.1` on 2026-08-31):
+**CI (recommended):** any push builds `v25.12.1` (docs-only pushes
+skip) and uploads two artifacts: `immortalwrt-xiaomi-miwifi-r3` (the
+images) and `immortalwrt-imagebuilder-miwifi-r3` (below). The
+workflow caches downloads, the toolchain, the feeds checkout, and
+ccache, all keyed so that upstream or config changes invalidate
+cleanly; a cold build takes ~1.5–2 h, warm rebuilds substantially
+less. Manual dispatch accepts any ImmortalWrt ref:
 
 ```bash
 gh workflow run build.yml -f ref=v25.12.1
 ```
 
-**Docker, local:** `.\build.ps1` — clones into a named volume, applies
-`patches/`, drops images in `out\`. `-Shell` for an interactive build
-environment. (First run downloads a few hundred MB — on a slow
-connection, prefer CI.)
+**Docker, local:** `.\build.ps1` — clones into a named volume,
+applies the port, drops images in `out\`. `-Shell` for an interactive
+build environment.
 
 **Manual, any tree:**
 
@@ -102,28 +100,21 @@ cp ../config.seed .config && make defconfig
 make -j"$(nproc)" download && make -j"$(nproc)"
 ```
 
-Images land in `bin/targets/ramips/mt7620/`:
-`sysupgrade.bin` (nand sysupgrade), `initramfs-kernel.bin` (RAM-boot
-test/recovery image), `factory.bin` / `breed-factory.bin`
-(pb-boot/breed formats), `kernel1.bin` + `rootfs0.bin` (split).
-
-Note: `make defconfig` does **not** include LuCI on its own —
-`config.seed` adds it explicitly.
+Images land in `bin/targets/ramips/mt7620/`: `sysupgrade.bin` (normal
+upgrade), `initramfs-kernel.bin` (RAM-boot test/recovery image),
+`factory.bin` / `breed-factory.bin` (pb-boot/breed recovery formats),
+`kernel1.bin` + `rootfs0.bin` (split pieces).
 
 ## ImageBuilder — package changes without recompiling
 
-Each CI run also produces an ImageBuilder (`CONFIG_IB=y`): the
-prebuilt kernel, the image-assembly machinery, and — via
-`CONFIG_ALL_KMODS=y` — **every kernel module** as a `.apk` built
-against that kernel's exact vermagic. This solves the missing-kmod
-problem: official-feed kmods can never match our patched kernel, but
-the ImageBuilder carries its own complete, matching set. Plain
-userland packages (`curl`, `luci-app-*`, …) don't need to match the
-kernel, so `patches/0005` points the ImageBuilder at the official
-per-arch feeds for those — kmods still resolve only from the bundle
-(apk pins the exact kernel version). Image recipes are trimmed to the
-R3 (`scripts/trim-mt7620-to-r3.sh`), so `make info` lists exactly one
-profile.
+A self-built kernel's **vermagic** never matches the official
+release's, so official-feed kernel modules are permanently
+uninstallable on this firmware. The pipeline solves that: each CI run
+sets `CONFIG_ALL_KMODS=y` (every kmod is built against that exact
+kernel) and ships an ImageBuilder that bundles them all, with
+`patches/0005` pointing it at the official per-arch feeds for plain
+userland packages. Recipes are trimmed to the R3, so `make info`
+lists exactly one profile.
 
 On x86_64 Linux (WSL or Docker on Windows):
 
@@ -137,16 +128,19 @@ make image PROFILE=xiaomi_miwifi-r3 PACKAGES="luci kmod-batman-adv luci-proto-ba
 
 → a fresh `sysupgrade.bin` in `bin/targets/ramips/mt7620/` in about a
 minute; flash with "Keep settings". Alternatively, skip the reflash:
-the bundled `packages/` directory is a local feed, and any `kmod-*.apk`
-from it installs directly on a router running the **same** build
-(`apk add ./kmod-….apk`). Two rules: never mix kmods across builds
-(each build is its own vermagic universe — after a reflash, use that
-run's ImageBuilder), and kernel-side changes (driver patches, kernel
-config) still need a full CI rebuild, which yields a new ImageBuilder.
+the bundled `packages/` directory is a local feed, and any
+`kmod-*.apk` from it installs directly on a router running the
+**same** build (`apk add ./kmod-….apk`).
+
+Two rules: never mix kmods across builds (each build is its own
+vermagic universe — after a reflash, use that run's ImageBuilder),
+and kernel-side changes (driver patches, kernel config) still need a
+full CI rebuild, which yields a new ImageBuilder.
 
 ## Flashing
 
-Read [RECOVERY.md](RECOVERY.md) first — it encodes the safety doctrine
-this port was built under: the stock bootloader is never modified,
-every image is RAM-tested via TFTP before touching flash, and a
-verified full-NAND backup plus working serial console back every step.
+Read [RECOVERY.md](RECOVERY.md) first — it encodes the safety
+doctrine this port was built under: the stock bootloader is never
+modified, every image is RAM-tested via TFTP before touching flash,
+and a verified full-NAND backup plus a working serial console back
+every step.

@@ -1,22 +1,20 @@
-# Port notes — background, history, and corrections
+# Port notes — technical reference
 
-Research record for the Mi Router 3 ImmortalWrt port. Everything here was
-verified against primary sources (git history, raw file fetches,
-on-device inspection). Compiled 2026-08-30, updated 2026-08-31 after the
-port was built and RAM-tested on the real unit.
-
-Status history: researched → parked (no recovery path) → serial console
-established → **port proven from RAM, zero flash writes** → permanent
-install via sysupgrade.
+What this port changes and why, written to stand alone. How these
+conclusions were reached — including dead ends and corrected
+assumptions — lives in [RESEARCH-LOG.md](RESEARCH-LOG.md). Operating
+the device (flashing, recovery, serial) is covered by
+[../RECOVERY.md](../RECOVERY.md).
 
 ## Why the device fell out of OpenWrt
 
-The parallel raw NAND is the entire problem; every other component is
-ordinary ramips/mt7620 and works on current kernels.
-
-OpenWrt shipped an in-tree MT7620 NAND driver
-(`drivers/mtd/maps/ralink_nand.c`, `CONFIG_MTD_NAND_MT7620=y`) through
-kernel 4.4, used by two boards (Sercomm NA930, Ralink MT7620a V22SG EVB):
+The Xiaomi Mi Router 3 is an ordinary ramips/mt7620 board in every
+respect but one: its 128 MiB of storage is **parallel raw NAND**, and
+mainline Linux has no driver for the MT7620's NAND controller.
+OpenWrt shipped an out-of-tree driver
+(`drivers/mtd/maps/ralink_nand.c`, `CONFIG_MTD_NAND_MT7620=y`)
+through kernel 4.4, used by two boards (Sercomm NA930, Ralink MT7620a
+V22SG EVB), then lost it in the 4.4 → 4.9 bump:
 
 | commit | date | what happened |
 |---|---|---|
@@ -27,49 +25,49 @@ kernel 4.4, used by two boards (Sercomm NA930, Ralink MT7620a V22SG EVB):
 | `10f27c6f00` | 2020-04-01 | new clean MT7621 NAND driver |
 | `2f2e81a4ea` | 2022-01-19 | moved to `files/drivers/mtd/nand/raw/mt7621_nand.c`, where it lives today |
 
-Orphaned to this day: `compatible = "mtk,mt7620-nand"` still appears in
-`mt7620a_sercomm_na930.dts` and `mt7620a_ralink_mt7620a-v22sg-evb.dts`
-upstream with no driver behind it.
+`compatible = "mtk,mt7620-nand"` still appears in two upstream DTS
+files with no driver behind it.
 
-**Two upstream attempts, both rejected:**
+Two attempts to bring the R3 back upstream were rejected:
+openwrt/openwrt#597 (2018, by ptpt52 / Chen Minqiang, who went on to
+found X-Wrt — which is why X-Wrt supports the R3 and OpenWrt does
+not) and openwrt/openwrt#9344 (2022, where maintainer Daniel Golle
+judged that a separate `ramips/mt7620-nand` subtarget would be needed
+and called the driver "in very bad shape and unfit for submission
+upstream"; 75 of 137 `IMAGE_SIZE` declarations in `mt7620.mk` are
+≤ 8192k, so enabling NAND features subtarget-wide is a real risk to
+other boards). ImmortalWrt's own `openwrt-18.06-k5.4` branch carries
+the identical patch — this port effectively forward-ports
+ImmortalWrt-lineage code.
 
-- openwrt/openwrt#597 — "Mir3 support" by ptpt52 (2018), closed
-  unmerged. ptpt52 (Chen Minqiang) subsequently founded X-Wrt, which is
-  exactly why X-Wrt has the R3 and OpenWrt does not.
-- openwrt/openwrt#9344 (2022) — Daniel Golle: a separate
-  `ramips/mt7620-nand` subtarget would be needed ("enabling that for
-  all mt7620 boards will break many devices… too much effort only to
-  allow support of basically this one device. Imho it's a good
-  candidate for a community build") and "the NAND driver is in very bad
-  shape and unfit for submission upstream." The space concern is real:
-  75 of 137 `IMAGE_SIZE` declarations in `mt7620.mk` are ≤ 8192k.
+This repo therefore maintains the port **out of tree**: a patch
+series and an idempotent installer script that graft X-Wrt's driver
+and device support onto a current ImmortalWrt checkout.
 
-ImmortalWrt's own `openwrt-18.06-k5.4` branch carries the identical
-patch filename — this is ImmortalWrt-lineage code; the port is asking
-them to forward-port their own patch.
+## The NAND driver
 
-## The driver
-
-`ralink_nand.c` (2,113 lines) is the legacy Ralink SDK driver. Its
-defining property explains both why upstream refuses it and why it
-never breaks: it **bypasses the Linux rawnand framework completely** —
-own `struct ra_nand_chip`, own bad-block table, own read/write/erase,
-registering a bare `struct mtd_info`. It touches almost no kernel API,
-so it survived 5.10 → 6.18 essentially untouched. It carries
-`LINUX_VERSION_CODE` guards for 6.12+ and a local `nand_ecclayout`
-replacing the struct the kernel removed.
+`ralink_nand.c` (2,113 lines) is the legacy Ralink SDK driver,
+maintained by X-Wrt. Its defining property explains both why upstream
+refuses it and why it never breaks: it **bypasses the Linux rawnand
+framework completely** — its own `struct ra_nand_chip`, its own
+bad-block table, its own read/write/erase paths, registering a bare
+`struct mtd_info`. It touches almost no kernel API, so it survived
+5.10 → 6.18 essentially untouched, carrying `LINUX_VERSION_CODE`
+guards for 6.12+ and a local `nand_ecclayout` replacing a struct the
+kernel removed.
 
 - Binding `compatible = "mtk,mt7620-nand"`; MTD device name `ra_nfc`.
-- Partition probes `{ "cmdlinepart", "ofpart", NULL }` — cmdlinepart
-  outranks the device tree.
-- Author date 2017-11-18, committer date rolling — x-wrt continuously
-  rebases its stack onto current OpenWrt. Live code, not abandonware.
-  (This is also why `vendor/x-wrt/` pins file contents + a HEAD sha,
-  not commit SHAs.)
+- Partition probes `{ "cmdlinepart", "ofpart", NULL }` — a kernel
+  command line can outrank the device tree.
+- ECC: software Hamming over 512-byte steps, 1-bit correction.
+- X-Wrt continuously rebases its patch stack onto current OpenWrt, so
+  its commit SHAs are unstable; this repo vendors file contents plus
+  the HEAD they were read at (`vendor/x-wrt/`, see its
+  [PROVENANCE.md](../vendor/x-wrt/PROVENANCE.md)).
 
-### "Just extend mt7621_nand.c" does not work
+### Why not extend OpenWrt's mt7621 NAND driver
 
-Different IP generations, not variants:
+MT7620 NFC and MT7621 NFI are different IP generations, not variants:
 
 | | MT7620 NFC | MT7621 NFI |
 |---|---|---|
@@ -77,247 +75,177 @@ Different IP generations, not variants:
 | ECC | Hamming 24-bit/512B, 1-bit correction **in software** | hardware BCH, strength 4–12, hardware error readback |
 | overlap | zero shared register offsets | — |
 
-The windows MT7621 uses are marked *Reserved* on MT7620. 0 of 1,344
-driver lines transfer. Only `mtk_bmt` is controller-independent.
+The register windows MT7621 uses are marked *Reserved* on MT7620.
+None of the 1,344 mt7621 driver lines transfer; only `mtk_bmt` is
+controller-independent.
 
-**Witnessed on this unit (2026-08-31):** the software Hamming path
-detected a real single-bit flip (page 0x6b7 in `kernel_stock`, byte
-445 bit 1), corrected it, and produced output byte-identical to the
-verified backup on consecutive runs. The correction path works.
+## The port — 13 touch points
 
-### The driver corrects but never reports — patches/0004
+Touch points 1–11 derive from x-wrt commits `387988e8c956` (driver)
+and `f4fc1766f08a` + follow-ups (device), author Chen Minqiang; 12
+and 13 are this repo's own fixes. Applied either as the
+`patches/0001–0005` git-am series (vs ImmortalWrt master `db5c5de`)
+or by `scripts/apply-r3-support.sh` (version-aware; auto-detects
+`KERNEL_PATCHVER`, works on 6.12 and 6.18 trees). Both mechanisms
+produce functionally identical trees (verified by tree-diff).
 
-The stock driver detects and corrects single-bit ECC errors, but
-swallows the event: the mtd `_read` hook returns 0, `ecc_strength` is
-unset, and the `ecc_stats` hookup is a commented-out TODO
-(`//ranfc_mtd->ecc_stats;`). MTD core therefore never returns
-`-EUCLEAN`, so UBI's scrubbing — its rewrite-on-bitflip self-healing —
-never triggers, and weak pages get re-corrected on every read forever.
+1. `files/drivers/mtd/maps/ralink_nand.c` — the driver (new file)
+2. `files/drivers/mtd/maps/ralink_nand.h` — (new file)
+3. `patches-<kv>/0038-mtd-ralink-add-mt7620-nand-driver.patch` —
+   18-line Kconfig/Makefile hook (6.12 and 6.18 variants
+   byte-identical)
+4. `dts/mt7620a_xiaomi_miwifi-r3.dts` — device tree; x-wrt master's
+   version (modernized `nvmem-layout`; the 18.06-era one uses removed
+   bindings)
+5. `image/mt7620.mk` — device/image recipe (formats below)
+6. `mt7620/target.mk` — `FEATURES += nand`
+7. `mt7620/config-<kv>` — `MTD_NAND_MT7620`, UBI, UBIFS + compression
+   dependencies
+8. `mt7620/base-files/lib/upgrade/platform.sh` — nand sysupgrade with
+   bootloader/slot detection
+9. `mt7620/base-files/etc/board.d/02_network` — switch ports
+   (`1:lan 4:lan 0:wan 6@eth0`) + MACs from the `factory` partition
+   at offset 0x28
+10. `package/boot/uboot-tools/uboot-envtools/files/ramips` —
+    fw_printenv config (env on mtd1, offset 0x0, size 0x1000, sector
+    0x20000)
+11. `package/base-files/files/lib/upgrade/nand.sh` —
+    `CI_KERNPART_EXT` support (`patches/0003`): platform.sh's
+    breed/pb-boot detection sets this variable so sysupgrade writes
+    the kernel to **both** slots; it is an x-wrt extension that stock
+    ImmortalWrt ignores, so without this patch the detection would be
+    decorative and sysupgrade under breed/pb-boot would leave the
+    booted slot stale. A guarded no-op under stock U-Boot.
+12. `files/drivers/mtd/maps/ralink_nand.c` — ECC bitflip reporting
+    (`patches/0004`, ours — below)
+13. `target/imagebuilder/Makefile` — userland feeds in the standalone
+    apk ImageBuilder (`patches/0005`, ours — below)
 
-Observed on the real unit (2026-08-31): the UBI attach scan corrected
-3 pages on the first flash boot, 9 later the same day after heavy
-full-NAND read activity. All were page 0 of an erase block (UBI EC
-headers, written ~2022 per the image sequence number, never rewritten
-since) and all decoded as clean single-bit corrections — random
-ECC-format garbage would do that with probability ~2^-12 per chunk, so
-these are genuine retention/read-disturb flips, not a format mismatch.
-The corrections all landed in the 0xFF padding past the 64-byte EC
-header, which is why UBI simultaneously reported 0 corrupted PEBs.
+`mt76x8/config-<kv>` additionally needs
+`# CONFIG_MTD_NAND_MT7620 is not set` — mt76x8 is also `SOC_MT7620`,
+so the new Kconfig symbol becomes visible there.
 
-`patches/0004` counts successful corrections per read op, returns the
-standard max-bitflips-per-ECC-step value from `_read`, and sets
-`ecc_strength = bitflip_threshold = 1` — with 1-bit Hamming any
-corrected step is at its limit, so an immediate `-EUCLEAN`/scrub is
-right. Verified on hardware 2026-08-31, exactly as designed: the
-first boot of a 0004 build printed the corrections once while UBI
-scrubbed the aged blocks, and a reinstall of the same image then
-booted with **zero** `nfc_ecc_verify` lines — nothing left to correct
-([boot log](boot-logs/2026-08-31-first-boot-v25.12.1-p0004-ib-image.md),
-from the silent second install). Future flips self-heal via scrub,
-and corrections are counted in
-`/sys/class/mtd/*/corrected_bits`. Kernel partitions (mtd7/mtd8) are
-not UBI-managed — the known mtd7 flip stays until that partition is
-rewritten (harmless, dormant slot). Candidate for upstreaming to
-x-wrt.
+## patches/0004 — ECC corrections must reach MTD
 
-### The standalone ImageBuilder is a sealed universe — patches/0005
+The stock driver detects and corrects single-bit ECC errors but
+swallows the event: its mtd `_read` hook returns 0, `ecc_strength`
+is unset, and the `ecc_stats` hookup is a commented-out TODO. The
+consequence is systemic: MTD core never returns `-EUCLEAN`, so UBI's
+scrubbing — its rewrite-on-bitflip self-healing — never triggers, and
+aging pages get silently re-corrected on every read, forever, until a
+second bit flips in the same 512-byte step and the data is lost
+(1-bit Hamming cannot correct two).
 
-ImmortalWrt defaults to `CONFIG_IB_STANDALONE=y`, which makes the
-ImageBuilder bundle every package the firmware build produced — but
-write **no** `repositories` file at all. First real-world use (the
-immortalwrt-build-web preset list, 2026-08-31) failed on exactly that:
-every kmod resolved from the bundle, while `curl`, `htop`, `nano` and
-the `luci-app-*`/`luci-proto-*` companions came back "no such package"
-— they are plain userland packages our build never compiled, and the
-IB had nowhere else to look. Turning IB_STANDALONE off is not an
-option here: that variant lists the per-target feed (whose kmods carry
-the official kernel's vermagic, useless to us) and bundles only
-base-files/libc/kernel, discarding the ALL_KMODS point entirely.
+The fix counts successful corrections per read operation, returns the
+kernel-standard max-bitflips-per-ECC-step value from `_read`, and
+sets `ecc_strength = bitflip_threshold = 1`: with 1-bit correction,
+any corrected step is already at the correction limit, so an
+immediate `-EUCLEAN` → UBI scrub is the right response. This matches
+mainline `nand_base.c` accounting conventions; corrections become
+visible in `/sys/class/mtd/*/corrected_bits`.
+
+Hardware-verified: aged single-bit flips in 2022-written UBI headers
+were reported once on the first boot of a fixed build, UBI scrubbed
+(rewrote) the blocks, and subsequent boots are silent
+([archived boot log](boot-logs/2026-08-31-first-boot-v25.12.1-p0004-ib-image.md)).
+Interpretation guide: an occasional `nfc_ecc_verify`/`correct byte`
+message is a fresh flip self-healing; the same page repeating across
+boots would warrant investigation. Kernel partitions (mtd7/mtd8) are
+not UBI-managed and do not self-heal — a flip there persists until
+the partition is rewritten. Candidate for upstreaming to x-wrt. The
+investigation that established all this:
+[RESEARCH-LOG.md](RESEARCH-LOG.md#the-ecc-investigation-patches0004).
+
+## patches/0005 — userland feeds for the standalone ImageBuilder
+
+Because this port's kernel is self-built, its **vermagic** (the hash
+kernel modules are matched against) can never equal the official
+release's — official-feed kmods are permanently uninstallable, and
+Linux without `CONFIG_MODULE_FORCE_LOAD` offers no override. The
+repo's answer is `CONFIG_ALL_KMODS=y` (build **every** kmod with each
+firmware) plus `CONFIG_IB=y` (ship an ImageBuilder per CI run that
+bundles them all).
+
+ImmortalWrt builds that ImageBuilder standalone
+(`CONFIG_IB_STANDALONE=y`): every locally-built package is bundled,
+but no `repositories` file is written, so plain **userland** packages
+the firmware build didn't compile (curl, luci-app-\*, …) cannot be
+installed at all — even though they are kernel-independent and
+published in the official per-architecture feeds. Disabling
+IB_STANDALONE would not help: that variant bundles only
+base-files/libc/kernel and lists the per-target feed, whose kmods
+carry the foreign official vermagic.
 
 `patches/0005` makes the standalone apk ImageBuilder emit a
 `repositories` file listing only the **per-arch userland feeds**
 (`packages/mipsel_24kc/{base,packages,luci,routing,telephony}`),
 mirroring upstream's `FeedSourcesAppendAPK` minus its per-target and
-kmods lines. Kernel-dependent packages keep resolving exclusively from
-the bundled `packages/` directory (apk pins the exact kernel version,
-so a foreign kmod could not sneak in even if a remote feed offered
-one), while any of the thousands of release userland packages installs
-on demand — signature-verified, since the IB already ships the distro
-public keys in `keys/`. Verified end-to-end against the run-33351584447
-artifact with a hand-written `repositories` file: 217-package image,
-kmods at `6.12.94~b22042c4…`, userland from the official feeds.
-`config.seed` also sets `CONFIG_FEED_video=m` — the 25.12 release repo
-publishes no video feed, and `=m` keeps its URL commented out instead
-of 404-warning on every apk update (on the router's own feed list
-too). Also a candidate for upstreaming, to ImmortalWrt itself.
+kmods lines. Kernel-dependent packages keep resolving exclusively
+from the bundled `packages/` directory (apk pins the exact kernel
+version, so a foreign kmod cannot sneak in even if a remote feed
+offered one); any release userland package installs on demand,
+signature-verified against the distro public keys the ImageBuilder
+already ships in `keys/`. Candidate for upstreaming to ImmortalWrt.
 
-## The port
+Related seed setting: `CONFIG_FEED_video=m` — the 25.12 release repo
+publishes no `video` feed, and `=m` emits its URL commented out (in
+the router's own feed list too) instead of producing a 404 warning on
+every package-index update.
 
-Touch points 1–11 derived from x-wrt commits `387988e8c956`
-(driver) and `f4fc1766f08a` + follow-ups (device), author Chen
-Minqiang; 12 and 13 are our own fixes on top:
+Operating rules that follow from the vermagic design:
 
-1. `files/drivers/mtd/maps/ralink_nand.c` — new
-2. `files/drivers/mtd/maps/ralink_nand.h` — new
-3. `patches-<kv>/0038-mtd-ralink-add-mt7620-nand-driver.patch` — 18-line
-   Kconfig/Makefile hook (6.12 and 6.18 variants byte-identical)
-4. `dts/mt7620a_xiaomi_miwifi-r3.dts` — new; x-wrt master's version
-   (modernized `nvmem-layout`; the 18.06-era one uses removed bindings)
-5. `image/mt7620.mk` — device recipe (see below)
-6. `mt7620/target.mk` — `FEATURES += nand`
-7. `mt7620/config-<kv>` — `MTD_NAND_MT7620`, UBI, UBIFS + compression deps
-8. `mt7620/base-files/lib/upgrade/platform.sh` — nand sysupgrade with
-   bootloader/slot detection
-9. `mt7620/base-files/etc/board.d/02_network` — switch ports
-   (`1:lan 4:lan 0:wan 6@eth0`) + MACs from factory `0x28`
-10. `package/boot/uboot-tools/uboot-envtools/files/ramips` — fw_printenv
-    config (mtd1, 0x0/0x1000/0x20000)
-11. `package/base-files/files/lib/upgrade/nand.sh` — `CI_KERNPART_EXT`
-    support (`patches/0003`): platform.sh's breed/pb-boot detection
-    sets this so sysupgrade writes the kernel to **both** slots; the
-    variable is an x-wrt extension that stock ImmortalWrt ignores, so
-    without this patch the detection lines are decorative and
-    sysupgrade under breed/pb-boot would leave the booted slot stale.
-12. `files/drivers/mtd/maps/ralink_nand.c` — ECC bitflip reporting
-    (`patches/0004`, ours): see "The driver corrects but never
-    reports" above.
-13. `target/imagebuilder/Makefile` — userland feeds in the standalone
-    apk ImageBuilder (`patches/0005`, ours): see "The standalone
-    ImageBuilder is a sealed universe" above.
+- kmods only ever come from the same CI run as the installed image;
+- kernel-side changes (driver patches, kernel config) need a full CI
+  rebuild, which yields a new ImageBuilder.
 
-(The original research counted eight; 9 and 10 surfaced when lifting
-the actual device commit — the first scaffold's apply script missed
-both, which would have produced wrong network config and no
-fw_printenv. 11 surfaced during the pb-boot safety research.)
+## Kernel/target choice
 
-`mt76x8/config-<kv>` additionally needs
-`# CONFIG_MTD_NAND_MT7620 is not set` — mt76x8 is also `SOC_MT7620`,
-so the new Kconfig symbol is visible there.
+The port targets both ImmortalWrt master (kernel 6.18 — the same
+kernel X-Wrt ships for this board, so porting changed one variable,
+the distro, not two) and the `v25.12.1` release (kernel 6.12 — a
+driver/kernel combination that had been compiled by no one, since
+x-wrt's mt7620 carries only `config-6.18`). Both combinations build
+green in CI and both have booted real hardware.
 
-Kernel target rationale: ImmortalWrt master = 6.18 = the same kernel as
-the X-Wrt build proven on this unit (6.18.44). One variable changes
-(distro), not two. The 6.12/25.12 combination was compiled by no one —
-x-wrt's mt7620 has only `config-6.18` — until this port: `v25.12.1`
-(kernel 6.12.94) built green in CI and runs on the unit (installed
-2026-08-31, clean boot, UBI 944/0/0).
+## Image formats and slot logic
 
-Image formats: `sysupgrade.bin` (nand sysupgrade tar + metadata),
-`kernel1.bin`/`rootfs0.bin` (split), `factory.bin` (kernel padded to
-4 MiB + UBI — the pb-boot/breed single-image format), and
-`breed-factory.bin` (kernel **twice** + UBI — both slots populated).
-Slot logic: with stock U-Boot the kernel lands in `kernel` (mtd8); with
-breed/pb-boot detected on mtd0, in `kernel_stock` (mtd7).
+`mt7620.mk` produces:
 
-Adding `nand` to the shared mt7620 subtarget is fine for this build
-(only the R3 profile is compiled) but is exactly what would sink an
-upstream PR — a PR-quality version needs a `ramips/mt7620-nand`
-subtarget. Reassuringly mt7621 already ships `FEATURES+=nand` with 46
-UBI recipes, so the ubinize/UBI/nand_do_upgrade pipeline is proven in
-the target tree.
+- `sysupgrade.bin` — nand sysupgrade tar + metadata (the normal
+  upgrade path)
+- `initramfs-kernel.bin` — complete system in one uImage, for
+  RAM-booting via TFTP (testing/recovery; writes nothing)
+- `kernel1.bin` / `rootfs0.bin` — the split pieces
+- `factory.bin` — kernel padded to 4 MiB + UBI (single-image format
+  used by pb-boot/breed web recovery)
+- `breed-factory.bin` — kernel **twice** (each padded to 4 MiB) + UBI
+  — populates both kernel slots at once
 
-## Corrections — things that looked true and are wrong
+Slot logic (from `platform.sh` + `patches/0003`): the R3 has two
+4 MiB kernel slots, `kernel_stock` (mtd7, at 0x200000) and `kernel`
+(mtd8, at 0x600000), sharing one UBI. Stock U-Boot honors Xiaomi's
+A/B flag and boots mtd8 on ported units; pb-boot/breed always boot
+mtd7. sysupgrade detects which bootloader is on mtd0 and writes the
+kernel to the slot(s) that bootloader will actually read.
 
-Read before re-researching anything.
+## Upstreaming outlook
 
-- **"There's a Breed for the R3" — there isn't.**
-  `breed-mt7620-xiaomi-mini.bin` is the Mini (SPI-NOR);
-  `breed-mt7621-xiaomi-r3g.bin` is the 3G (MT7621). The only
-  NAND-capable Breed is for Atheros AR9344. A wrong-device bootloader
-  on mtd0 is an unrecoverable brick.
-- **"USB recovery will save me" — not on this unit.** The bootloader
-  contains no USB/FAT support (full-partition strings scan: only
-  `uboot.bin`, `test.bin`, `saveenv`). Xiaomi's USB recovery lived in
-  the stock system in kernel0+rootfs0 — overwritten by X-Wrt.
-- **"U-Boot has a bootloader RAM-test menu option" — not on this
-  unit.** The real menu is 1/2/3/4/9 only; there is no option 7, and
-  **option 9 is "Load Boot Loader code then write to Flash"** — it
-  writes mtd0. Wiki lore about option layouts is not portable.
-- **"A bootloader image can be dry-run from a running U-Boot" — no.**
-  Warm-chaining pb-boot via `tftpboot`+`bootm` (transfer + CRC OK,
-  jump taken) died silently: no console, no HTTP, no DHCP. Bootloaders
-  expect cold-reset CPU state. The result says nothing about the
-  image's health — which is precisely why it can't serve as a
-  validation gate.
-- **"OpenWrt never had an MT7620 NAND driver" — wrong.** In-tree
-  through 4.4; see history above.
-- **"mt7620 on 6.12 has a bad WiFi regression" — fixed.**
-  openwrt/openwrt#19128 is closed/fixed, shipping in 25.12.1.
-- **"mt7620 is being deprecated" — no.** Active 2026 development
-  (upstream MediaTek ethernet PR #24557, PPE offload #24515).
-- **"ImmortalWrt images always include LuCI" — release images do,
-  `make defconfig` does not.** The first CI build booted SSH-only;
-  `CONFIG_PACKAGE_luci=y` belongs in the seed.
-- **A dormant second kernel slot is not a fallback.** mtd7 holds a
-  CRC-valid stock 2.6.36 kernel whose rootfs no longer exists — it
-  boots to a panic. Both slots share one UBI.
-- **"pb-boot recovery is at 192.168.15.1" — wrong, it's 192.168.1.1.**
-  Confirmed three ways: the binary's compiled-in env, and two
-  independent tutorials. pb-boot also ignores Xiaomi's A/B boot flags
-  entirely (no flag strings in the binary) — it always boots
-  `kernel_stock` @ 0x200000, which is why x-wrt's sysupgrade mirrors
-  the kernel there when it detects pb-boot/breed on mtd0.
-- **"pb-boot can be verified against an official hash" — no longer
-  possible.** `downloads.pangubox.com` is dead, the Wayback Machine
-  never captured the file, no forum or repo ever published its hash,
-  and GitHub code search finds nothing. The strongest available
-  verification is internal (self-CRC + cold-boot entry code + the
-  community record). See RECOVERY.md appendix for the full verdict.
+Adding `nand` to the shared mt7620 subtarget is fine for this repo
+(only the R3 profile is built) but is exactly what a mainline PR
+would be rejected for — a PR-quality version needs a
+`ramips/mt7620-nand` subtarget, and the driver itself would need a
+rawnand-framework rewrite. Encouragingly, mt7621 already ships
+`FEATURES+=nand` with 46 UBI recipes, so the
+ubinize/UBI/nand_do_upgrade pipeline is proven in this target tree.
+patches/0004 (x-wrt) and 0005 (ImmortalWrt) are self-contained
+upstream candidates independent of that question.
 
-## Questions that were open, now answered
+## Reference links
 
-- *Does the driver build at 6.18 on ImmortalWrt?* **Yes** — CI-built
-  2026-08-30, first try.
-- *Has anyone booted an R3 on 6.18 with ImmortalWrt?* **Yes — this
-  unit, 2026-08-31**, initramfs from RAM: all 10 partitions, backup-
-  identical reads, both radios on air, switch OK.
-- *Does `bootcmd=tftp` give a serial-free recovery path?* Observed
-  silent on a healthy boot; whether it fires after a kernel CRC failure
-  remains untested (and untestable without inducing that state).
-- *Will stock U-Boot load a uImage larger than the 4 MiB kernel slot
-  via TFTP?* **Yes** — the 8.9 MB initramfs loads and boots fine from
-  RAM (the 4 MiB limit is the flash slot, not TFTP).
-
-Still open: whether current OpenWrt maintainers would accept a proper
-driver in 2026 (Golle's refusal is from 2022); whether the NAND is
-BMT-formatted (x-wrt's own simple BBT works, mildly encouraging);
-whether U-Boot passes `bootargs` (env has none — the `cmdlinepart`
-mtd0-unlock trick was never tested and is moot now).
-
-## Ranked approaches (from the original research)
-
-1. Mainline-quality driver + `mt7620-nand` subtarget → OpenWrt PR —
-   months, refused twice, only worth it for its own sake.
-2. Same quality bar, ImmortalWrt only — plausible; they ship the patch
-   on 18.06-k5.4. No ImmortalWrt issue/PR mentions miwifi-r3.
-3. Fork ImmortalWrt master, lift the two x-wrt commits — **done, this
-   repo.**
-4. Same against openwrt-25.12 (6.12) — the installer script supports
-   it; combination still compiled by no one.
-5. Rebasable patch series + CI — **done, this repo.**
-6. Stay on X-Wrt — the fallback that remains available.
-7. SDK-backport packages onto 18.06-k5.4 — leaf packages only.
-8. Kernel in NAND, rootfs on USB — fails on initramfs/extroot
-   interaction and sysupgrade; not worth it.
-9. 25.12 userspace on the 18.06 base — impossible; the 25.12 feeds are
-   apk-v3 (`ADBd` container), opkg cannot read them, plus musl time64,
-   vermagic, ucode-LuCI, procd/ubusd singletons.
-
-## Reference
-
-Local:
-- `D:\r3-backup\` — verified full NAND backup (see RECOVERY.md)
-- `D:\xiaomi mir3\` — pb-boot image, stock firmware 2.11.20, padavan
-  .trx, old openwrt builds, STOK-exploit notes (`ssh r3.txt` — stock
-  firmware only: uses `nvram`, which X-Wrt-family firmware lacks)
-
-Upstream:
-- x-wrt source github.com/x-wrt/x-wrt · images downloads.x-wrt.com/rom/
-- ImmortalWrt github.com/immortalwrt/immortalwrt (master 6.18,
-  openwrt-25.12 6.12, openwrt-18.06-k5.4 5.4)
-- OpenWrt ToH openwrt.org/toh/xiaomi/mir3 (listed unsupported)
-- Breed breed.hackpascal.net (no R3 build — see corrections)
-
-Community R3 efforts: ptpt52/lede-source,
-JustNoLimit/Xiaomi-MiWifi-R3-OpenWrt-Stable,
-XFY9326/Xiaomi-R3-OpenWrt-Stable, astolfogit/miwifi-r3-production,
-SourceForge mir3-openwrt (5.10 builds), OpenWrt forum thread 140403.
+- x-wrt: github.com/x-wrt/x-wrt · images: downloads.x-wrt.com/rom/
+- ImmortalWrt: github.com/immortalwrt/immortalwrt (master = 6.18,
+  openwrt-25.12 = 6.12, openwrt-18.06-k5.4 = 5.4)
+- OpenWrt table of hardware: openwrt.org/toh/xiaomi/mir3 (listed
+  unsupported)
+- Community history and further links:
+  [RESEARCH-LOG.md](RESEARCH-LOG.md)

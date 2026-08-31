@@ -21,10 +21,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Current ubuntu runners have ~88G free on a 145G disk; the build peaks
-      # around 30-40G, so no preinstalled-software purge is needed. If this
-      # ever prints a small disk again, restore the rm -rf of
-      # /usr/share/dotnet /usr/local/lib/android /opt/hostedtoolcache/CodeQL.
+      # Disk headroom check only. GitHub's ubuntu runners have ~88 GB free
+      # on a 145 GB disk (measured 2026-08); this build peaks around
+      # 30-40 GB, so no cleanup of preinstalled software is needed. Should
+      # a run ever fail with "No space left on device", the classic fix is
+      # deleting /usr/share/dotnet /usr/local/lib/android
+      # /opt/hostedtoolcache/CodeQL here (~18 GB) before building.
       - name: Report disk space
         run: df -h /
 
@@ -59,12 +61,13 @@ jobs:
           restore-keys: |
             dl-
 
-      # Toolchain + host tools (~35 min cold). Keyed on the ref plus a hash
-      # of the toolchain-defining trees AND config.seed: build options like
-      # CCACHE change every package's configure fingerprint, and replaying
-      # that onto restored build trees re-runs configure on dirty state
-      # (run 33359642180: binutils/gdb died that way). A seed change must
-      # miss cleanly and rebuild. No cross-ref fallback on purpose.
+      # Toolchain + host tools (~35-40 min cold). Keyed on the ref, the
+      # toolchain-defining source trees, AND config.seed. The seed matters
+      # because build options (e.g. CCACHE wrapping the compilers) enter
+      # every package's configure fingerprint: restoring trees that were
+      # built under a different config makes make re-run configure on
+      # dirty state, which fails. Any of the three changing must miss
+      # cleanly and rebuild from scratch. No cross-ref fallback on purpose.
       - name: Restore toolchain cache
         id: cache-toolchain
         uses: actions/cache/restore@v6
@@ -151,9 +154,9 @@ jobs:
           path: immortalwrt/dl
           key: dl-${{ env.BUILD_REF }}
 
-      # No `|| make -j1 V=s` retry: BUILD_LOG=y already captures per-package
-      # logs (uploaded on failure), and the serial rerun burned up to an hour
-      # just to fail again.
+      # Deliberately no "|| make -j1 V=s world" retry: CONFIG_BUILD_LOG=y
+      # already writes per-package logs (uploaded on failure below), and a
+      # serial rerun would spend up to an hour reproducing the same failure.
       - name: Build
         run: cd immortalwrt && make -j"$(nproc)" world
 
