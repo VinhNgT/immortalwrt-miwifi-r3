@@ -59,8 +59,11 @@ jobs:
             dl-
 
       # Toolchain + host tools (~35 min cold). Keyed on the ref plus a hash
-      # of the toolchain-defining trees, so an upstream gcc/musl bump misses
-      # cleanly and rebuilds. No cross-ref fallback on purpose.
+      # of the toolchain-defining trees AND config.seed: build options like
+      # CCACHE change every package's configure fingerprint, and replaying
+      # that onto restored build trees re-runs configure on dirty state
+      # (run 33359642180: binutils/gdb died that way). A seed change must
+      # miss cleanly and rebuild. No cross-ref fallback on purpose.
       - name: Restore toolchain cache
         id: cache-toolchain
         uses: actions/cache/restore@v4
@@ -70,7 +73,7 @@ jobs:
             immortalwrt/staging_dir/toolchain-*
             immortalwrt/build_dir/host*
             immortalwrt/build_dir/toolchain-*
-          key: toolchain-${{ env.BUILD_REF }}-${{ hashFiles('immortalwrt/tools/**', 'immortalwrt/toolchain/**') }}
+          key: toolchain-${{ env.BUILD_REF }}-${{ hashFiles('immortalwrt/tools/**', 'immortalwrt/toolchain/**', 'config.seed') }}
 
       # Cached stamps must be newer than the freshly-cloned sources or make
       # re-does the work the cache was meant to skip.
@@ -140,6 +143,16 @@ jobs:
         with:
           path: immortalwrt/.ccache
           key: ccache-${{ env.BUILD_REF }}-${{ github.run_id }}
+
+      # CONFIG_BUILD_LOG=y writes per-package logs; without this a quiet
+      # "-C toolchain/binutils ... failed to build" is undiagnosable.
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: immortalwrt/logs/
+          if-no-files-found: ignore
 
       - name: Collect artifacts
         run: |
