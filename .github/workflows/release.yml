@@ -1,25 +1,55 @@
-name: build
+name: release
 
+# Two triggers:
+#
+#  - Tag push (v<upstream-version>-rN, cut by scripts/tag-release.sh):
+#    builds that upstream version and publishes an immutable GitHub
+#    release for the tag. Tags are the release ledger — numbering happens
+#    in the script (next free -rN read from origin's tags; git itself
+#    rejects duplicate tags), and the tag pins the exact port commit
+#    being released.
+#
+#  - workflow_dispatch: test build of any ref — uploads artifacts,
+#    publishes nothing.
+#
+# Releases are never modified after publishing: every build has a unique
+# kernel vermagic, so a release's bundled ImageBuilder must stay
+# downloadable unchanged for as long as anyone runs that release's image.
+# A rebuild of the same upstream version is always a new -rN tag.
 on:
   push:
-    branches: [main]
-    paths-ignore: ["**.md"]
+    tags: ["v*-r[0-9]*"]
   workflow_dispatch:
     inputs:
       ref:
-        description: "ImmortalWrt ref to build"
+        description: "ImmortalWrt ref for a test build (no release)"
         default: "v25.12.1"
 
-# The ref the device actually runs. Push builds use it too (master builds
-# only happen via manual dispatch with ref=master).
-env:
-  BUILD_REF: ${{ github.event.inputs.ref || 'v25.12.1' }}
+# Needed to create releases with the default GITHUB_TOKEN.
+permissions:
+  contents: write
+
+# One build at a time - concurrent runs would fight over the caches.
+concurrency:
+  group: release-build
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+
+      # Tag builds derive the upstream version from the tag name
+      # (v25.12.1-r3 -> v25.12.1); test builds take the dispatch input.
+      - name: Resolve build parameters
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            echo "RELEASE_TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
+            echo "BUILD_REF=${GITHUB_REF_NAME%-r*}" >> "$GITHUB_ENV"
+          else
+            echo "BUILD_REF=${{ inputs.ref }}" >> "$GITHUB_ENV"
+          fi
 
       # Disk headroom check only. GitHub's ubuntu runners have ~88 GB free
       # on a 145 GB disk (measured 2026-08); this build peaks around
@@ -178,22 +208,57 @@ jobs:
           path: immortalwrt/logs/
           if-no-files-found: ignore
 
-      - name: Collect artifacts
+      # Everything a release needs: all image formats + manifest,
+      # sha256sums, and the ImageBuilder matching this exact build.
+      - name: Collect release assets
         run: |
           mkdir -p out
           cp immortalwrt/bin/targets/ramips/mt7620/*miwifi-r3* out/
-          cp immortalwrt/bin/targets/ramips/mt7620/sha256sums out/ || true
+          cp immortalwrt/bin/targets/ramips/mt7620/sha256sums out/
+          cp immortalwrt/bin/targets/ramips/mt7620/immortalwrt-imagebuilder-*.tar.* out/
+          ls -la out/
 
-      - uses: actions/upload-artifact@v7
+      # Test builds (workflow_dispatch) get artifacts instead of a release.
+      - name: Upload artifacts (test build)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v7
         with:
           name: immortalwrt-xiaomi-miwifi-r3
           path: out/
 
-      # ImageBuilder (CONFIG_IB): prebuilt kernel + every kmod (.apk) matching
-      # this build's vermagic. Assembles new package sets / installs kmods for
-      # THIS build without recompiling; big (hundreds of MB), so separate.
-      - uses: actions/upload-artifact@v7
-        with:
-          name: immortalwrt-imagebuilder-miwifi-r3
-          path: immortalwrt/bin/targets/ramips/mt7620/immortalwrt-imagebuilder-*.tar.*
-          if-no-files-found: error
+      # gh is preinstalled on GitHub-hosted runners (not an extra
+      # dependency) and is the least-fragile way to create a release with
+      # assets; the raw REST equivalent is two endpoints plus MIME handling.
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          kernel=$(awk '$1 == "kernel" { print $3 }' \
+            immortalwrt/bin/targets/ramips/mt7620/*.manifest | head -n1)
+          upstream=$(git -C immortalwrt rev-parse HEAD)
+
+          {
+            echo "ImmortalWrt \`$BUILD_REF\` (upstream commit \`$upstream\`) for the Xiaomi Mi Router 3,"
+            echo "built from port commit \`$GITHUB_SHA\`."
+            echo
+            echo "Kernel package version: \`$kernel\`"
+            echo
+            echo "**Assets**: sysupgrade image (normal upgrade), initramfs (TFTP RAM-boot"
+            echo "test/recovery), factory/breed/split recovery formats, \`sha256sums\`, and"
+            echo "this build's ImageBuilder."
+            echo
+            echo "**Kernel modules are tied to this exact build** (vermagic): install"
+            echo "kmods only from *this release's* ImageBuilder, never from another"
+            echo "release or the official feeds. See the README for ImageBuilder usage."
+          } > notes.md
+
+          # If a previous publish attempt half-succeeded, this fails on the
+          # already-existing release: inspect it, delete it if incomplete,
+          # then re-run this workflow run (the tag itself stays valid).
+          gh release create "$RELEASE_TAG" \
+            --verify-tag \
+            --title "ImmortalWrt $BUILD_REF for Mi Router 3 ($RELEASE_TAG)" \
+            --notes-file notes.md \
+            out/*
+          echo "Published release $RELEASE_TAG"

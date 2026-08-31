@@ -22,9 +22,5 @@ done
 cp "$V/0038-mtd-ralink-add-mt7620-nand-driver.patch.6.18" \
    "$V/0038-mtd-ralink-add-mt7620-nand-driver.patch"
 
-if command -v gh >/dev/null 2>&1; then
-	gh api repos/x-wrt/x-wrt/commits/master --jq '.sha' > "$V/HEAD.sha"
-else
-	echo unknown > "$V/HEAD.sha"
-fi
+git ls-remote https://github.com/x-wrt/x-wrt.git HEAD | cut -f1 > "$V/HEAD.sha"
 echo "x-wrt HEAD: $(cat "$V/HEAD.sha")"

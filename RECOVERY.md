@@ -150,8 +150,8 @@ same way to vet any new build.
 ## Installing ImmortalWrt (permanent)
 
 Use a build whose seed includes LuCI (`config.seed` in this repo
-does). Get `…squashfs-sysupgrade.bin` from the latest green CI run
-(or build one with the ImageBuilder — see README).
+does). Get `…squashfs-sysupgrade.bin` from a GitHub release of this
+repo (or build one with that release's ImageBuilder — see README).
 
 Via the running firmware's web UI (on X-Wrt that is LuCI at its
 default `192.168.15.1`):
@@ -162,7 +162,7 @@ default `192.168.15.1`):
 3. When coming **from a different firmware family**, uncheck "Keep
    settings" (= `sysupgrade -n`) — old config must not carry over.
    Between builds of this same port, keeping settings is fine.
-4. Verify the displayed checksum against the artifact's `sha256sums`,
+4. Verify the displayed checksum against the release's `sha256sums`,
    proceed, and leave the device alone for 3–5 minutes.
 5. After a cross-family flash the address changes to
    **`192.168.1.1`**, user `root`, no password — set one immediately.

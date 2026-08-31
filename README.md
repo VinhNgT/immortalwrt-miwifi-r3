@@ -57,10 +57,11 @@ here.
 | `patches/` | five-commit `git am` series vs ImmortalWrt master `db5c5de` (driver, device, dual-slot nand.sh, ECC reporting, ImageBuilder feeds) — the reviewable/upstreamable form |
 | `scripts/apply-r3-support.sh` | idempotent installer; auto-detects `KERNEL_PATCHVER` (works on 6.12 and 6.18 trees) |
 | `scripts/trim-mt7620-to-r3.sh` | strips all other mt7620 device recipes so the ImageBuilder offers only the R3 profile (CI runs it after the installer) |
+| `scripts/tag-release.sh` | cuts a release: computes the next `<version>-rN`, tags HEAD, pushes — the tag push triggers the release build |
 | `vendor/x-wrt/` | pinned x-wrt sources + [PROVENANCE.md](vendor/x-wrt/PROVENANCE.md); refresh via `scripts/fetch-vendor.sh` |
 | `config.seed` | build seed (target + device + LuCI + kmod/IB/ccache options, each explained inline) |
 | `docker/`, `build.ps1` | local containerized build |
-| `.github/workflows/build.yml` | CI: build, cache, upload image + ImageBuilder artifacts |
+| `.github/workflows/release.yml` | manual CI: build an ImmortalWrt ref and publish a versioned release (images + checksums + ImageBuilder) |
 | `docs/PORT-NOTES.md` | technical reference: driver, the 13 touch points, patches 0004/0005 |
 | `docs/RESEARCH-LOG.md` | how the conclusions were reached — corrections, dead ends, incidents |
 | `docs/boot-logs/` | archived (redacted) boot logs from real hardware |
@@ -73,17 +74,35 @@ device work by Chen Minqiang (x-wrt), GPL-2.0.
 
 ## Building
 
-**CI (recommended):** any push builds `v25.12.1` (docs-only pushes
-skip) and uploads two artifacts: `immortalwrt-xiaomi-miwifi-r3` (the
-images) and `immortalwrt-imagebuilder-miwifi-r3` (below). The
-workflow caches downloads, the toolchain, the feeds checkout, and
-ccache, all keyed so that upstream or config changes invalidate
-cleanly; a cold build takes ~1.5–2 h, warm rebuilds substantially
-less. Manual dispatch accepts any ImmortalWrt ref:
+**CI releases (recommended):** cut a release by tagging:
 
 ```bash
-gh workflow run build.yml -f ref=v25.12.1
+sh scripts/tag-release.sh v25.12.1
 ```
+
+The script finds the next free release number for that upstream
+version, tags the current commit `<immortalwrt-version>-rN`
+(`v25.12.1-r1`, `v25.12.1-r2`, …), and pushes the tag; the tag push
+triggers the release workflow, which builds that ImmortalWrt version
+and publishes a GitHub release containing every image format,
+`sha256sums`, and that build's ImageBuilder (below).
+
+The port build number `-rN` exists because the port itself evolves
+between builds of the same upstream release. Releases are
+**immutable** — a release's ImageBuilder must stay downloadable
+unchanged for as long as anyone runs that release's image (kernel
+modules only match their own build; see below) — so any rebuild
+becomes the next `-rN`. Each release tag points at the exact port
+commit that built it, and the release notes record the upstream
+commit and kernel package version.
+
+For a build without a release (testing a change), dispatch the same
+workflow manually via the "Run workflow" button on the repo's Actions
+page — it uploads the images as workflow artifacts instead.
+
+The workflow caches downloads, the toolchain, the feeds checkout, and
+ccache, all keyed so upstream or config changes invalidate cleanly; a
+cold build takes ~1.5–2 h, warm rebuilds substantially less.
 
 **Docker, local:** `.\build.ps1` — clones into a named volume,
 applies the port, drops images in `out\`. `-Shell` for an interactive
@@ -109,14 +128,15 @@ upgrade), `initramfs-kernel.bin` (RAM-boot test/recovery image),
 
 A self-built kernel's **vermagic** never matches the official
 release's, so official-feed kernel modules are permanently
-uninstallable on this firmware. The pipeline solves that: each CI run
-sets `CONFIG_ALL_KMODS=y` (every kmod is built against that exact
-kernel) and ships an ImageBuilder that bundles them all, with
-`patches/0005` pointing it at the official per-arch feeds for plain
-userland packages. Recipes are trimmed to the R3, so `make info`
-lists exactly one profile.
+uninstallable on this firmware. The pipeline solves that: every
+release is built with `CONFIG_ALL_KMODS=y` (every kmod compiled
+against that exact kernel) and ships an ImageBuilder that bundles
+them all, with `patches/0005` pointing it at the official per-arch
+feeds for plain userland packages. Recipes are trimmed to the R3, so
+`make info` lists exactly one profile.
 
-On x86_64 Linux (WSL or Docker on Windows):
+Download the ImageBuilder **from the same release as the firmware you
+run**, then on x86_64 Linux (WSL or Docker on Windows):
 
 ```bash
 tar xf immortalwrt-imagebuilder-*.tar.zst && cd immortalwrt-imagebuilder-*/
@@ -132,10 +152,11 @@ the bundled `packages/` directory is a local feed, and any
 `kmod-*.apk` from it installs directly on a router running the
 **same** build (`apk add ./kmod-….apk`).
 
-Two rules: never mix kmods across builds (each build is its own
-vermagic universe — after a reflash, use that run's ImageBuilder),
-and kernel-side changes (driver patches, kernel config) still need a
-full CI rebuild, which yields a new ImageBuilder.
+Two rules: never mix kmods across releases (each build is its own
+vermagic universe — after flashing a different release, switch to
+that release's ImageBuilder), and kernel-side changes (driver
+patches, kernel config) need a new release, which ships a new
+ImageBuilder.
 
 ## Flashing
 

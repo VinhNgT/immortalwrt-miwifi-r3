@@ -163,8 +163,8 @@ kernel modules are matched against) can never equal the official
 release's — official-feed kmods are permanently uninstallable, and
 Linux without `CONFIG_MODULE_FORCE_LOAD` offers no override. The
 repo's answer is `CONFIG_ALL_KMODS=y` (build **every** kmod with each
-firmware) plus `CONFIG_IB=y` (ship an ImageBuilder per CI run that
-bundles them all).
+firmware) plus `CONFIG_IB=y` (every release ships an ImageBuilder
+that bundles them all).
 
 ImmortalWrt builds that ImageBuilder standalone
 (`CONFIG_IB_STANDALONE=y`): every locally-built package is bundled,
@@ -194,9 +194,9 @@ every package-index update.
 
 Operating rules that follow from the vermagic design:
 
-- kmods only ever come from the same CI run as the installed image;
-- kernel-side changes (driver patches, kernel config) need a full CI
-  rebuild, which yields a new ImageBuilder.
+- kmods only ever come from the same release as the installed image;
+- kernel-side changes (driver patches, kernel config) need a new
+  release, which ships a new ImageBuilder.
 
 ## Kernel/target choice
 
